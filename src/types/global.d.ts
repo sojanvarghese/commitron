@@ -1,14 +1,11 @@
-// Global type declarations for packages without proper TypeScript support
-
-// Node.js global types
 declare global {
-  var process: {
+  let process: {
     env: { [key: string]: string | undefined };
     stdin: { isTTY?: boolean };
     argv: string[];
     exit(code?: number): never;
   };
-  var console: {
+  let console: {
     log(...args: any[]): void;
     error(...args: any[]): void;
     warn(...args: any[]): void;
