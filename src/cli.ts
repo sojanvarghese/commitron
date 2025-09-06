@@ -1,7 +1,3 @@
-#!/usr/bin/env node
-
-/// <reference path="./types/global.d.ts" />
-
 import { Command } from 'commander';
 import chalk from 'chalk';
 import inquirer from 'inquirer';
@@ -9,18 +5,14 @@ import { readFileSync } from 'fs';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import process from 'process';
-import { CommitX } from './core/commitx.js';
-import { ConfigManager } from './config/index.js';
-import { CommitConfig } from './types/index.js';
+import { ConfigManager } from './config.js';
+import { CommitConfig } from './types/common.js';
 import {
   validateConfigKey,
-  validateConfigValue,
   validateCommitMessage,
-  sanitizeError
 } from './utils/security.js';
+import { ErrorType } from './types/error-handler.js';
 import {
-  ErrorHandler,
-  ErrorType,
   withErrorHandling,
   SecureError
 } from './utils/error-handler.js';
@@ -30,7 +22,6 @@ const __dirname = dirname(__filename);
 const packageJson = JSON.parse(readFileSync(join(__dirname, '../package.json'), 'utf-8'));
 
 const program = new Command();
-const errorHandler = ErrorHandler.getInstance();
 
 program
   .name('commit-x')
