@@ -1,6 +1,13 @@
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { CommitSuggestion, CommitConfig, GitDiff, CommitType } from '../types/index.js';
 import { ConfigManager } from '../config/index.js';
+import {
+  analyzeCommitType,
+  extractScope,
+  formatConventionalCommit,
+  generateDescription,
+  validateCommitMessage as validateMessage
+} from '../utils/commit-helpers.js';
 
 export class AIService {
   private genAI: GoogleGenerativeAI;
@@ -20,18 +27,23 @@ export class AIService {
   /**
    * Generate commit message suggestions based on git diffs
    */
-  async generateCommitMessage(diffs: GitDiff[]): Promise<CommitSuggestion[]> {
+  generateCommitMessage = async (diffs: GitDiff[]): Promise<CommitSuggestion[]> => {
     const config = this.config.getConfig();
     const model = this.genAI.getGenerativeModel({ model: config.model || 'gemini-1.5-flash' });
 
-    const prompt = this.buildPrompt(diffs, config);
+    // Enhanced analysis using helper functions
+    const analysisContext = this.analyzeChanges(diffs);
+    const prompt = this.buildEnhancedPrompt(diffs, config, analysisContext);
 
     try {
       const result = await model.generateContent(prompt);
       const response = await result.response;
       const text = response.text();
 
-      return this.parseResponse(text, config);
+      const suggestions = this.parseResponse(text, config);
+
+      // Validate and improve suggestions
+      return this.validateAndImprove(suggestions, analysisContext);
     } catch (error) {
       throw new Error(`Failed to generate commit message: ${error}`);
     }
@@ -40,7 +52,7 @@ export class AIService {
   /**
    * Build the prompt for AI based on configuration and changes
    */
-  private buildPrompt(diffs: GitDiff[], config: CommitConfig): string {
+  private buildPrompt = (diffs: GitDiff[], config: CommitConfig): string => {
     let prompt = '';
 
     if (config.customPrompt) {
@@ -98,38 +110,131 @@ export class AIService {
   /**
    * Get default prompt based on configuration
    */
-  private getDefaultPrompt(config: CommitConfig): string {
+  private getDefaultPrompt = (config: CommitConfig): string => {
     let prompt = 'You are an expert Git commit message generator. ';
+
+    // Core principles for all commit messages
+    prompt += 'IMPORTANT GUIDELINES:\n';
+    prompt += '1. Use PAST TENSE (e.g., "Added", "Fixed", "Updated", "Refactored")\n';
+    prompt += '2. Be SPECIFIC and MEANINGFUL (avoid generic messages like "Updated files" or "Fixed bug")\n';
+    prompt += '3. Focus on WHAT was changed and WHY it was necessary\n';
+    prompt += '4. Use ATOMIC approach - describe the specific change in this file\n\n';
 
     switch (config.style) {
       case 'conventional':
-        prompt += 'Generate commit messages following the Conventional Commits specification (https://conventionalcommits.org/). ';
-        prompt += 'Use types like feat, fix, docs, style, refactor, perf, test, build, ci, chore. ';
-        prompt += 'Format: type(scope): description. ';
+        prompt += 'Generate commit messages following Conventional Commits specification:\n';
+        prompt += '- Format: type(scope): past-tense description\n';
+        prompt += '- Types: feat, fix, docs, style, refactor, perf, test, build, ci, chore\n';
+        prompt += '- Examples:\n';
+        prompt += '  * "feat(auth): added OAuth2 integration with Google provider"\n';
+        prompt += '  * "fix(api): resolved null pointer exception in user validation"\n';
+        prompt += '  * "refactor(utils): extracted validation logic into separate module"\n';
         break;
 
       case 'descriptive':
-        prompt += 'Generate descriptive commit messages that clearly explain what was changed and why. ';
-        prompt += 'Use imperative mood and be specific about the changes. ';
+        prompt += 'Generate descriptive commit messages in past tense:\n';
+        prompt += '- Clearly explain what was changed and why\n';
+        prompt += '- Examples:\n';
+        prompt += '  * "Added comprehensive error handling for API requests"\n';
+        prompt += '  * "Refactored user authentication to use JWT tokens"\n';
+        prompt += '  * "Fixed memory leak in event listener cleanup"\n';
         break;
 
       case 'minimal':
-        prompt += 'Generate concise, minimal commit messages that capture the essence of the change. ';
-        prompt += 'Keep messages short but meaningful. ';
+        prompt += 'Generate concise commit messages in past tense:\n';
+        prompt += '- Short but meaningful descriptions\n';
+        prompt += '- Examples:\n';
+        prompt += '  * "Added user validation"\n';
+        prompt += '  * "Fixed login bug"\n';
+        prompt += '  * "Updated dependencies"\n';
         break;
     }
 
-    prompt += `Keep messages under ${config.maxLength || 72} characters for the first line. `;
-    prompt += 'Focus on the "what" and "why" of the changes. ';
-    prompt += 'Be specific and avoid generic messages like "update files" or "fix bug". ';
+    prompt += `\nKeep first line under ${config.maxLength || 72} characters. `;
+    prompt += 'Avoid vague terms like "updated", "changed", "modified" without context. ';
+    prompt += 'Be specific about the actual functionality or improvement implemented. ';
 
     return prompt;
   }
 
   /**
+   * Analyze changes to provide context for better commit messages
+   */
+  private analyzeChanges = (diffs: GitDiff[]) => {
+    const primaryDiff = diffs[0]; // For individual commits, we have one file
+
+    return {
+      commitType: analyzeCommitType(diffs),
+      scope: extractScope(primaryDiff.file),
+      description: generateDescription(primaryDiff),
+      fileCount: diffs.length,
+      totalAdditions: diffs.reduce((sum, diff) => sum + diff.additions, 0),
+      totalDeletions: diffs.reduce((sum, diff) => sum + diff.deletions, 0)
+    };
+  }
+
+  /**
+   * Build enhanced prompt with analysis context
+   */
+  private buildEnhancedPrompt = (diffs: GitDiff[], config: CommitConfig, analysis: any): string => {
+    let prompt = this.getDefaultPrompt(config);
+
+    // Add analysis context to help AI generate better messages
+    prompt += `\n\nChange Analysis Context:\n`;
+    prompt += `- Suggested commit type: ${analysis.commitType}\n`;
+    prompt += `- File scope: ${analysis.scope || 'general'}\n`;
+    prompt += `- Suggested description: ${analysis.description}\n`;
+    prompt += `- Total changes: +${analysis.totalAdditions}/-${analysis.totalDeletions}\n`;
+
+    // Add file details
+    prompt += '\n\nFile Details:\n';
+    diffs.forEach((diff, index) => {
+      prompt += `File ${index + 1}: ${diff.file}\n`;
+      if (diff.isNew) prompt += 'Status: New file\n';
+      else if (diff.isDeleted) prompt += 'Status: Deleted file\n';
+      else if (diff.isRenamed) prompt += `Status: Renamed from ${diff.oldPath}\n`;
+      else prompt += 'Status: Modified\n';
+      prompt += `Changes: +${diff.additions} -${diff.deletions}\n\n`;
+    });
+
+    prompt += 'Generate 3 commit message suggestions following the guidelines above.\n';
+    prompt += 'Return as JSON: {"suggestions": [{"message": "...", "description": "...", "confidence": 0.95}]}\n';
+
+    return prompt;
+  }
+
+  /**
+   * Validate and improve commit message suggestions
+   */
+  private validateAndImprove = (suggestions: CommitSuggestion[], analysis: any): CommitSuggestion[] => {
+    return suggestions.map(suggestion => {
+      const validation = validateMessage(suggestion.message);
+
+      if (!validation.valid) {
+        // Try to improve the message based on validation feedback
+        let improvedMessage = suggestion.message;
+
+        // Apply automatic improvements based on analysis
+        if (suggestion.message.length > 72) {
+          improvedMessage = improvedMessage.substring(0, 69) + '...';
+        }
+
+        return {
+          ...suggestion,
+          message: improvedMessage,
+          description: suggestion.description + ' (auto-improved)',
+          confidence: Math.max(0.7, (suggestion.confidence || 0.8) - 0.1)
+        };
+      }
+
+      return suggestion;
+    });
+  }
+
+  /**
    * Parse AI response and extract commit suggestions
    */
-  private parseResponse(response: string, config: CommitConfig): CommitSuggestion[] {
+  private parseResponse = (response: string, config: CommitConfig): CommitSuggestion[] => {
     try {
       // Try to extract JSON from the response
       const jsonMatch = response.match(/\{[\s\S]*\}/);
@@ -159,7 +264,7 @@ export class AIService {
   /**
    * Fallback parser for text responses
    */
-  private parseTextResponse(response: string, config: CommitConfig): CommitSuggestion[] {
+  private parseTextResponse = (response: string, config: CommitConfig): CommitSuggestion[] => {
     const lines = response.split('\n').filter(line => line.trim());
     const suggestions: CommitSuggestion[] = [];
 
@@ -190,7 +295,7 @@ export class AIService {
   /**
    * Validate commit message format
    */
-  validateCommitMessage(message: string, style: string): { valid: boolean; errors: string[] } {
+  validateCommitMessage = (message: string, style: string): { valid: boolean; errors: string[] } => {
     const errors: string[] = [];
 
     if (!message || message.trim().length === 0) {
