@@ -1,30 +1,7 @@
-/// <reference path="../types/global.d.ts" />
-
 import chalk from 'chalk';
 import { sanitizeError } from './security.js';
-
-export enum ErrorType {
-  VALIDATION_ERROR = 'VALIDATION_ERROR',
-  SECURITY_ERROR = 'SECURITY_ERROR',
-  NETWORK_ERROR = 'NETWORK_ERROR',
-  FILE_SYSTEM_ERROR = 'FILE_SYSTEM_ERROR',
-  GIT_ERROR = 'GIT_ERROR',
-  AI_SERVICE_ERROR = 'AI_SERVICE_ERROR',
-  CONFIG_ERROR = 'CONFIG_ERROR',
-  TIMEOUT_ERROR = 'TIMEOUT_ERROR',
-  UNKNOWN_ERROR = 'UNKNOWN_ERROR'
-}
-
-export interface ErrorContext {
-  operation?: string;
-  file?: string;
-  userId?: string;
-  timestamp?: Date;
-  key?: string;
-  attempt?: number;
-  maxRetries?: number;
-  additionalInfo?: Record<string, any>;
-}
+import { ERROR_LOG_LIMIT, RECENT_ERROR_THRESHOLD_MS, DEFAULT_RETRY_ATTEMPTS, DEFAULT_RETRY_DELAY_MS } from '../constants/error-handler.js';
+import { ErrorType, ErrorContext } from '../types/error-handler.js';
 
 export class SecureError extends Error {
   public readonly type: ErrorType;
@@ -42,10 +19,7 @@ export class SecureError extends Error {
     super(sanitizeError(message));
     this.name = 'SecureError';
     this.type = type;
-    this.context = {
-      ...context,
-      timestamp: new Date()
-    };
+    this.context = { ...context, timestamp: new Date() };
     this.isRecoverable = isRecoverable;
     this.userMessage = userMessage || this.getDefaultUserMessage();
   }
@@ -87,36 +61,25 @@ export class ErrorHandler {
     return ErrorHandler.instance;
   }
 
-  /**
-   * Handles errors with appropriate logging and user feedback
-   */
   public handleError = (error: any, context: ErrorContext = {}): SecureError => {
     let secureError: SecureError;
 
     if (error instanceof SecureError) {
       secureError = error;
     } else {
-      // Convert unknown errors to SecureError
       secureError = this.createSecureError(error, context);
     }
 
-    // Log the error
     this.logError(secureError);
-
-    // Display user-friendly message
     this.displayError(secureError);
 
     return secureError;
   };
 
-  /**
-   * Creates a SecureError from any error
-   */
   private createSecureError = (error: any, context: ErrorContext): SecureError => {
     const message = error?.message || 'Unknown error occurred';
     const sanitizedMessage = sanitizeError(message);
 
-    // Determine error type based on error characteristics
     let type = ErrorType.UNKNOWN_ERROR;
     let isRecoverable = false;
 
@@ -175,18 +138,13 @@ export class ErrorHandler {
     return new SecureError(sanitizedMessage, type, context, isRecoverable);
   };
 
-  /**
-   * Logs error for debugging (without sensitive information)
-   */
   private logError = (error: SecureError): void => {
     this.errorLog.push({ error, timestamp: new Date() });
 
-    // Keep only last 100 errors
-    if (this.errorLog.length > 100) {
-      this.errorLog = this.errorLog.slice(-100);
+    if (this.errorLog.length > ERROR_LOG_LIMIT) {
+      this.errorLog = this.errorLog.slice(-ERROR_LOG_LIMIT);
     }
 
-    // Log to console in development
     if (process.env.NODE_ENV === 'development') {
       console.error('Error logged:', {
         type: error.type,
@@ -197,14 +155,10 @@ export class ErrorHandler {
     }
   };
 
-  /**
-   * Displays user-friendly error message
-   */
   private displayError = (error: SecureError): void => {
     const color = this.getErrorColor(error.type);
     console.error(color(`❌ ${error.userMessage}`));
 
-    // Show additional context if available
     if (error.context.operation) {
       console.error(chalk.gray(`   Operation: ${error.context.operation}`));
     }
@@ -213,15 +167,11 @@ export class ErrorHandler {
       console.error(chalk.gray(`   File: ${error.context.file}`));
     }
 
-    // Show recovery suggestion for recoverable errors
     if (error.isRecoverable) {
       console.error(chalk.yellow('   💡 This error might be recoverable. Please try again.'));
     }
   };
 
-  /**
-   * Gets appropriate color for error type
-   */
   private getErrorColor = (type: ErrorType): (text: string) => string => {
     switch (type) {
       case ErrorType.SECURITY_ERROR:
@@ -245,13 +195,10 @@ export class ErrorHandler {
     }
   };
 
-  /**
-   * Gets error statistics
-   */
   public getErrorStats = (): { total: number; byType: Record<string, number>; recent: number } => {
     const byType: Record<string, number> = {};
     const recent = this.errorLog.filter(
-      entry => Date.now() - entry.timestamp.getTime() < 24 * 60 * 60 * 1000 // Last 24 hours
+      entry => Date.now() - entry.timestamp.getTime() < RECENT_ERROR_THRESHOLD_MS // Last 24 hours
     ).length;
 
     this.errorLog.forEach(entry => {
@@ -265,16 +212,10 @@ export class ErrorHandler {
     };
   };
 
-  /**
-   * Clears error log
-   */
   public clearErrorLog = (): void => {
     this.errorLog = [];
   };
 
-  /**
-   * Handles process exit with cleanup
-   */
   public handleProcessExit = (code: number = 1): void => {
     if (this.errorLog.length > 0) {
       console.error(chalk.gray(`\n📊 Error Summary: ${this.errorLog.length} errors logged`));
@@ -283,9 +224,6 @@ export class ErrorHandler {
   };
 }
 
-/**
- * Utility function to wrap operations with error handling
- */
 export const withErrorHandling = <T>(
   operation: () => T | Promise<T>,
   context: ErrorContext = {}
@@ -295,7 +233,6 @@ export const withErrorHandling = <T>(
   try {
     const result = operation();
 
-    // If it's a Promise, handle it asynchronously
     if (result instanceof Promise) {
       return result.catch((error) => {
         const secureError = errorHandler.handleError(error, context);
@@ -308,7 +245,6 @@ export const withErrorHandling = <T>(
       });
     }
 
-    // If it's not a Promise, return it directly
     return result;
   } catch (error) {
     const secureError = errorHandler.handleError(error, context);
@@ -321,13 +257,10 @@ export const withErrorHandling = <T>(
   }
 };
 
-/**
- * Utility function to retry operations with exponential backoff
- */
 export const withRetry = async <T>(
   operation: () => Promise<T>,
-  maxRetries: number = 3,
-  baseDelay: number = 500, // Reduced from 1000ms to 500ms
+  maxRetries: number = DEFAULT_RETRY_ATTEMPTS,
+  baseDelay: number = DEFAULT_RETRY_DELAY_MS,
   context: ErrorContext = {}
 ): Promise<T> => {
   const errorHandler = ErrorHandler.getInstance();
@@ -347,7 +280,6 @@ export const withRetry = async <T>(
         break;
       }
 
-      // Exponential backoff
       const delay = baseDelay * Math.pow(2, attempt - 1);
       console.log(chalk.yellow(`⏳ Retrying in ${delay}ms... (attempt ${attempt}/${maxRetries})`));
       await new Promise(resolve => setTimeout(resolve, delay));
