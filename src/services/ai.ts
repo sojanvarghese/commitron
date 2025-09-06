@@ -8,45 +8,114 @@ import {
   generateDescription,
   validateCommitMessage as validateMessage
 } from '../utils/commit-helpers.js';
+import {
+  validateDiffSize,
+  validateApiKey,
+  withTimeout,
+  DEFAULT_LIMITS,
+  sanitizeError
+} from '../utils/security.js';
+import {
+  ErrorHandler,
+  ErrorType,
+  withErrorHandling,
+  withRetry,
+  SecureError
+} from '../utils/error-handler.js';
 
 export class AIService {
   private genAI: GoogleGenerativeAI;
   private config: ConfigManager;
+  private errorHandler: ErrorHandler;
 
   constructor() {
     this.config = ConfigManager.getInstance();
+    this.errorHandler = ErrorHandler.getInstance();
+
     const apiKey = this.config.getApiKey();
 
     if (!apiKey) {
-      throw new Error('Gemini API key not found. Please set GEMINI_API_KEY environment variable or configure it with "commit-x config set apiKey YOUR_API_KEY"');
+      throw new SecureError(
+        'Gemini API key not found. Please set GEMINI_API_KEY environment variable or configure it with "commit-x config set apiKey YOUR_API_KEY"',
+        ErrorType.CONFIG_ERROR,
+        { operation: 'AIService.constructor' },
+        true
+      );
     }
 
-    this.genAI = new GoogleGenerativeAI(apiKey);
+    // Validate API key format
+    const keyValidation = validateApiKey(apiKey);
+    if (!keyValidation.isValid) {
+      throw new SecureError(
+        keyValidation.error!,
+        ErrorType.VALIDATION_ERROR,
+        { operation: 'AIService.constructor' },
+        true
+      );
+    }
+
+    this.genAI = new GoogleGenerativeAI(keyValidation.sanitizedValue!);
   }
 
   /**
-   * Generate commit message suggestions based on git diffs
+   * Generate commit message suggestions based on git diffs with security validation
    */
   generateCommitMessage = async (diffs: GitDiff[]): Promise<CommitSuggestion[]> => {
-    const config = this.config.getConfig();
-    const model = this.genAI.getGenerativeModel({ model: config.model || 'gemini-1.5-flash' });
+    return withRetry(async () => {
+      return withErrorHandling(async () => {
+        // Validate input diffs
+        if (!diffs || diffs.length === 0) {
+          throw new SecureError(
+            'No diffs provided for commit message generation',
+            ErrorType.VALIDATION_ERROR,
+            { operation: 'generateCommitMessage' },
+            true
+          );
+        }
 
-    // Enhanced analysis using helper functions
-    const analysisContext = this.analyzeChanges(diffs);
-    const prompt = this.buildEnhancedPrompt(diffs, config, analysisContext);
+        // Validate diff sizes
+        for (const diff of diffs) {
+          const diffValidation = validateDiffSize(diff.changes, DEFAULT_LIMITS.maxDiffSize);
+          if (!diffValidation.isValid) {
+            throw new SecureError(
+              diffValidation.error!,
+              ErrorType.VALIDATION_ERROR,
+              { operation: 'generateCommitMessage', file: diff.file },
+              true
+            );
+          }
+        }
 
-    try {
-      const result = await model.generateContent(prompt);
-      const response = await result.response;
-      const text = response.text();
+        const config = this.config.getConfig();
+        const model = this.genAI.getGenerativeModel({ model: config.model || 'gemini-1.5-flash' });
 
-      const suggestions = this.parseResponse(text, config);
+        // Enhanced analysis using helper functions
+        const analysisContext = this.analyzeChanges(diffs);
+        const prompt = this.buildEnhancedPrompt(diffs, config, analysisContext);
 
-      // Validate and improve suggestions
-      return this.validateAndImprove(suggestions, analysisContext);
-    } catch (error) {
-      throw new Error(`Failed to generate commit message: ${error}`);
-    }
+        // Validate prompt size
+        if (prompt.length > DEFAULT_LIMITS.maxApiRequestSize) {
+          throw new SecureError(
+            `Prompt size ${prompt.length} exceeds limit of ${DEFAULT_LIMITS.maxApiRequestSize} characters`,
+            ErrorType.VALIDATION_ERROR,
+            { operation: 'generateCommitMessage' },
+            true
+          );
+        }
+
+        const result = await withTimeout(
+          model.generateContent(prompt),
+          DEFAULT_LIMITS.timeoutMs
+        );
+        const response = await result.response;
+        const text = response.text();
+
+        const suggestions = this.parseResponse(text, config);
+
+        // Validate and improve suggestions
+        return this.validateAndImprove(suggestions, analysisContext);
+      }, { operation: 'generateCommitMessage' });
+    }, 3, 2000, { operation: 'generateCommitMessage' });
   }
 
   /**
