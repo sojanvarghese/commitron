@@ -1,27 +1,59 @@
 /// <reference path="../types/global.d.ts" />
 
-import { GitDiff, CommitType } from '../types/index.js';
+import { GitDiff, CommitType, PlaywrightPatterns } from '../types/index.js';
 
 /**
  * Utility functions for commit message processing and analysis
  */
 
 /**
+ * Analyzes Playwright-specific patterns in file paths
+ */
+export const analyzePlaywrightPatterns = (filePath: string): PlaywrightPatterns => {
+  const lowerPath = filePath.toLowerCase();
+  const fileName = filePath.split('/').pop()?.toLowerCase() || '';
+
+  return {
+    isPOM: lowerPath.includes('page') || lowerPath.includes('pom') ||
+           fileName.includes('page.') || lowerPath.includes('pageobject'),
+    isSpec: fileName.includes('.spec.') || fileName.includes('.test.') ||
+            lowerPath.includes('/tests/') || lowerPath.includes('/specs/'),
+    isFixture: lowerPath.includes('fixture') || fileName.includes('fixtures.') ||
+               lowerPath.includes('test-data') || fileName.includes('setup.'),
+    isConfig: fileName.includes('playwright.config') || fileName.includes('test.config') ||
+              lowerPath.includes('playwright.config'),
+    isUtil: lowerPath.includes('utils') || lowerPath.includes('helpers') ||
+            lowerPath.includes('common') || fileName.includes('helper.'),
+    testType: lowerPath.includes('e2e') || lowerPath.includes('playwright') ? 'e2e' :
+              lowerPath.includes('integration') ? 'integration' :
+              lowerPath.includes('unit') ? 'unit' : 'unknown'
+  };
+};
+
+/**
  * Determines the most appropriate commit type based on file changes
  */
 export const analyzeCommitType = (diffs: GitDiff[]): CommitType => {
-  const filePatterns = diffs.map(diff => ({
-    file: diff.file,
-    isNew: diff.isNew,
-    isDeleted: diff.isDeleted,
-    hasTests: diff.file.includes('test') || diff.file.includes('spec'),
-    isDocs: diff.file.includes('README') || diff.file.endsWith('.md'),
-    isConfig: diff.file.includes('config') || diff.file.includes('.json') || diff.file.includes('.yml'),
-    isStyles: diff.file.endsWith('.css') || diff.file.endsWith('.scss') || diff.file.endsWith('.less'),
-    isCI: diff.file.includes('.github') || diff.file.includes('workflow') || diff.file.includes('Dockerfile')
-  }));
+  const filePatterns = diffs.map(diff => {
+    const playwrightPatterns = analyzePlaywrightPatterns(diff.file);
 
-  // Determine commit type based on file patterns
+    return {
+      file: diff.file,
+      isNew: diff.isNew,
+      isDeleted: diff.isDeleted,
+      hasTests: diff.file.includes('test') || diff.file.includes('spec'),
+      isE2E: playwrightPatterns.testType === 'e2e' || diff.file.includes('playwright') ||
+             diff.file.includes('e2e') || playwrightPatterns.isPOM || playwrightPatterns.isSpec,
+      isDocs: diff.file.includes('README') || diff.file.endsWith('.md'),
+      isConfig: diff.file.includes('config') || diff.file.includes('.json') || diff.file.includes('.yml'),
+      isStyles: diff.file.endsWith('.css') || diff.file.endsWith('.scss') || diff.file.endsWith('.less'),
+      isCI: diff.file.includes('.github') || diff.file.includes('workflow') || diff.file.includes('Dockerfile'),
+      playwrightPatterns
+    };
+  });
+
+  // Determine commit type based on file patterns (prioritize E2E detection)
+  if (filePatterns.every(p => p.isE2E)) return CommitType.E2E;
   if (filePatterns.every(p => p.hasTests)) return CommitType.TEST;
   if (filePatterns.every(p => p.isDocs)) return CommitType.DOCS;
   if (filePatterns.every(p => p.isStyles)) return CommitType.STYLE;
@@ -46,12 +78,13 @@ export const extractScope = (filePath: string): string | undefined => {
     }
   }
 
-  // Common scope patterns
+  // Common scope patterns including Playwright
   if (filePath.includes('auth')) return 'auth';
   if (filePath.includes('api')) return 'api';
   if (filePath.includes('ui') || filePath.includes('component')) return 'ui';
   if (filePath.includes('util')) return 'utils';
   if (filePath.includes('config')) return 'config';
+  if (filePath.includes('playwright') || filePath.includes('e2e')) return 'playwright';
   if (filePath.includes('test')) return 'test';
   if (filePath.includes('doc')) return 'docs';
 
@@ -64,29 +97,73 @@ export const extractScope = (filePath: string): string | undefined => {
 export const generateDescription = (diff: GitDiff): string => {
   const { file, isNew, isDeleted, isRenamed, additions, deletions } = diff;
   const fileName = file.split('/').pop() || file;
+  const playwrightPatterns = analyzePlaywrightPatterns(file);
+
+  // Capitalize first letter helper
+  const capitalize = (str: string) => str.charAt(0).toUpperCase() + str.slice(1);
 
   if (isDeleted) {
-    return `removed ${fileName}`;
+    if (playwrightPatterns.isPOM) {
+      return capitalize(`Removed page object model for ${fileName}`);
+    } else if (playwrightPatterns.isSpec) {
+      return capitalize(`Removed E2E test spec ${fileName}`);
+    } else if (playwrightPatterns.isFixture) {
+      return capitalize(`Removed test fixture ${fileName}`);
+    }
+    return capitalize(`Removed ${fileName}`);
   }
 
   if (isNew) {
-    return `added ${fileName} with ${additions} lines`;
+    if (playwrightPatterns.isPOM) {
+      return capitalize(`Added page object model for ${fileName.replace('.page.', '').replace('.ts', '')}`);
+    } else if (playwrightPatterns.isSpec) {
+      return capitalize(`Added E2E test spec for ${fileName.replace('.spec.', '').replace('.test.', '').replace('.ts', '')}`);
+    } else if (playwrightPatterns.isFixture) {
+      return capitalize(`Added test fixture for ${fileName.replace('.fixture.', '').replace('.ts', '')}`);
+    } else if (playwrightPatterns.isConfig) {
+      return capitalize(`Added Playwright configuration ${fileName}`);
+    } else if (playwrightPatterns.isUtil) {
+      return capitalize(`Added test utility ${fileName}`);
+    }
+    return capitalize(`Added ${fileName} with ${additions} lines`);
   }
 
   if (isRenamed) {
-    return `renamed ${diff.oldPath} to ${file}`;
+    return capitalize(`Renamed ${diff.oldPath} to ${file}`);
   }
 
-  // Analyze the nature of changes
+  // Analyze the nature of changes with Playwright context
   const netChange = additions - deletions;
+
+  if (playwrightPatterns.isPOM) {
+    if (netChange > 10) {
+      return capitalize(`Enhanced page object model with new methods`);
+    } else {
+      return capitalize(`Updated page object model selectors`);
+    }
+  } else if (playwrightPatterns.isSpec) {
+    if (netChange > 20) {
+      return capitalize(`Expanded E2E test coverage with new scenarios`);
+    } else if (deletions > additions) {
+      return capitalize(`Refactored E2E test and removed redundant checks`);
+    } else {
+      return capitalize(`Updated E2E test assertions`);
+    }
+  } else if (playwrightPatterns.isFixture) {
+    return capitalize(`Updated test fixtures and data setup`);
+  } else if (playwrightPatterns.isConfig) {
+    return capitalize(`Updated Playwright configuration settings`);
+  }
+
+  // General change analysis
   if (netChange > 50) {
-    return `significantly enhanced ${fileName}`;
+    return capitalize(`Significantly enhanced ${fileName}`);
   } else if (netChange > 10) {
-    return `updated ${fileName} with new functionality`;
+    return capitalize(`Updated ${fileName} with new functionality`);
   } else if (deletions > additions) {
-    return `refactored ${fileName} and removed unused code`;
+    return capitalize(`Refactored ${fileName} and removed unused code`);
   } else {
-    return `improved ${fileName}`;
+    return capitalize(`Improved ${fileName}`);
   }
 };
 
