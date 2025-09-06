@@ -1,47 +1,19 @@
-/// <reference path="../types/global.d.ts" />
-
 import * as path from 'path';
 import * as fs from 'fs';
 import { promisify } from 'util';
+import { ValidationResult } from '../types/security.js';
+import { ALLOWED_CONFIG_KEYS, ALLOWED_MODELS, ALLOWED_STYLES, DEFAULT_LIMITS, SUSPICIOUS_COMMIT_PATTERNS, SUSPICIOUS_PATTERNS } from '../constants/security.js';
+import { AI_CUSTOM_PROMPT_MAX_LENGTH } from '../constants/ai.js';
 
 const stat = promisify(fs.stat);
 const access = promisify(fs.access);
 
-/**
- * Security utility functions for input validation, path sanitization, and resource management
- */
-
-export interface ValidationResult {
-  isValid: boolean;
-  error?: string;
-  sanitizedValue?: string;
-}
-
-export interface ResourceLimits {
-  maxFileSize: number; // in bytes
-  maxDiffSize: number; // in characters
-  maxApiRequestSize: number; // in characters
-  timeoutMs: number; // in milliseconds
-}
-
-export const DEFAULT_LIMITS: ResourceLimits = {
-  maxFileSize: 10 * 1024 * 1024, // 10MB
-  maxDiffSize: 50000, // 50KB
-  maxApiRequestSize: 100000, // 100KB
-  timeoutMs: 10000 // Reduced from 30 seconds to 10 seconds
-};
-
-/**
- * Validates and sanitizes file paths to prevent path traversal attacks
- */
 export const validateAndSanitizePath = (filePath: string, baseDir: string): ValidationResult => {
   try {
-    // Normalize the path and resolve it relative to base directory
     const normalizedPath = path.normalize(filePath);
     const resolvedPath = path.resolve(baseDir, normalizedPath);
     const baseResolved = path.resolve(baseDir);
 
-    // Check if the resolved path is within the base directory
     if (!resolvedPath.startsWith(baseResolved)) {
       return {
         isValid: false,
@@ -49,18 +21,7 @@ export const validateAndSanitizePath = (filePath: string, baseDir: string): Vali
       };
     }
 
-    // Check for suspicious patterns
-    const suspiciousPatterns = [
-      /\.\./, // Parent directory references
-      /\/\.\./, // Parent directory references with slash
-      /\\\.\./, // Windows parent directory references
-      /\/\//, // Double slashes
-      /\\\\/, // Double backslashes
-      /[<>:"|?*]/, // Invalid characters
-      // Note: Removed /^\./ pattern to allow legitimate hidden files like .eslintrc.cjs
-    ];
-
-    for (const pattern of suspiciousPatterns) {
+    for (const pattern of SUSPICIOUS_PATTERNS) {
       if (pattern.test(normalizedPath)) {
         return {
           isValid: false,
@@ -81,9 +42,6 @@ export const validateAndSanitizePath = (filePath: string, baseDir: string): Vali
   }
 };
 
-/**
- * Validates file size against limits
- */
 export const validateFileSize = async (filePath: string, maxSize: number = DEFAULT_LIMITS.maxFileSize): Promise<ValidationResult> => {
   try {
     const stats = await stat(filePath);
@@ -107,16 +65,7 @@ export const validateFileSize = async (filePath: string, maxSize: number = DEFAU
   }
 };
 
-/**
- * Validates and sanitizes user input for configuration keys
- */
 export const validateConfigKey = (key: string): ValidationResult => {
-  // Allowed configuration keys
-  const allowedKeys = [
-    'apiKey', 'model', 'style', 'maxLength', 'includeFiles',
-    'autoCommit', 'autoPush', 'customPrompt'
-  ];
-
   if (!key || typeof key !== 'string') {
     return {
       isValid: false,
@@ -124,10 +73,10 @@ export const validateConfigKey = (key: string): ValidationResult => {
     };
   }
 
-  if (!allowedKeys.includes(key)) {
+  if (!ALLOWED_CONFIG_KEYS.includes(key)) {
     return {
       isValid: false,
-      error: `Invalid configuration key: ${key}. Allowed keys: ${allowedKeys.join(', ')}`
+      error: `Invalid configuration key: ${key}. Allowed keys: ${ALLOWED_CONFIG_KEYS.join(', ')}`
     };
   }
 
@@ -137,9 +86,6 @@ export const validateConfigKey = (key: string): ValidationResult => {
   };
 };
 
-/**
- * Validates and sanitizes configuration values
- */
 export const validateConfigValue = (key: string, value: any): ValidationResult => {
   switch (key) {
     case 'apiKey':
@@ -149,37 +95,25 @@ export const validateConfigValue = (key: string, value: any): ValidationResult =
           error: 'API key must be a string with at least 10 characters'
         };
       }
-      // Remove any whitespace
       return {
         isValid: true,
         sanitizedValue: value.trim()
       };
 
     case 'model':
-      const allowedModels = [
-        'gemini-1.5-flash',
-        'gemini-1.5-pro',
-        'gemini-1.0-pro',
-        'gemini-2.0-flash',
-        'gemini-2.0-flash-lite',
-        'gemini-2.5-pro',
-        'gemini-2.5-flash',
-        'gemini-2.5-flash-lite'
-      ];
-      if (!allowedModels.includes(value)) {
+      if (!ALLOWED_MODELS.includes(value)) {
         return {
           isValid: false,
-          error: `Invalid model: ${value}. Allowed models: ${allowedModels.join(', ')}`
+          error: `Invalid model: ${value}. Allowed models: ${ALLOWED_MODELS.join(', ')}`
         };
       }
       return { isValid: true, sanitizedValue: value };
 
     case 'style':
-      const allowedStyles = ['conventional', 'descriptive', 'minimal'];
-      if (!allowedStyles.includes(value)) {
+      if (!ALLOWED_STYLES.includes(value)) {
         return {
           isValid: false,
-          error: `Invalid style: ${value}. Allowed styles: ${allowedStyles.join(', ')}`
+          error: `Invalid style: ${value}. Allowed styles: ${ALLOWED_STYLES.join(', ')}`
         };
       }
       return { isValid: true, sanitizedValue: value };
@@ -215,11 +149,10 @@ export const validateConfigValue = (key: string, value: any): ValidationResult =
           error: 'Custom prompt must be a string'
         };
       }
-      // Limit custom prompt length
-      if (value.length > 1000) {
+      if (value.length > AI_CUSTOM_PROMPT_MAX_LENGTH) {
         return {
           isValid: false,
-          error: 'Custom prompt must be 1000 characters or less'
+          error: `Custom prompt must be ${AI_CUSTOM_PROMPT_MAX_LENGTH} characters or less`
         };
       }
       return { isValid: true, sanitizedValue: value.trim() };
@@ -232,9 +165,6 @@ export const validateConfigValue = (key: string, value: any): ValidationResult =
   }
 };
 
-/**
- * Validates commit message input
- */
 export const validateCommitMessage = (message: string): ValidationResult => {
   if (!message || typeof message !== 'string') {
     return {
@@ -259,16 +189,7 @@ export const validateCommitMessage = (message: string): ValidationResult => {
     };
   }
 
-  // Check for potentially malicious content
-  const suspiciousPatterns = [
-    /[<>]/, // HTML tags
-    /javascript:/i, // JavaScript protocol
-    /data:/i, // Data protocol
-    /vbscript:/i, // VBScript protocol
-    /on\w+\s*=/i, // Event handlers
-  ];
-
-  for (const pattern of suspiciousPatterns) {
+  for (const pattern of SUSPICIOUS_COMMIT_PATTERNS) {
     if (pattern.test(trimmed)) {
       return {
         isValid: false,
@@ -283,9 +204,6 @@ export const validateCommitMessage = (message: string): ValidationResult => {
   };
 };
 
-/**
- * Validates diff content size
- */
 export const validateDiffSize = (diff: string, maxSize: number = DEFAULT_LIMITS.maxDiffSize): ValidationResult => {
   if (typeof diff !== 'string') {
     return {
@@ -307,9 +225,6 @@ export const validateDiffSize = (diff: string, maxSize: number = DEFAULT_LIMITS.
   };
 };
 
-/**
- * Creates a timeout promise for operations
- */
 export const withTimeout = <T>(promise: Promise<T>, timeoutMs: number = DEFAULT_LIMITS.timeoutMs): Promise<T> => {
   return Promise.race([
     promise,
@@ -319,24 +234,18 @@ export const withTimeout = <T>(promise: Promise<T>, timeoutMs: number = DEFAULT_
   ]);
 };
 
-/**
- * Safely reads a file with size validation
- */
 export const safeReadFile = async (filePath: string, baseDir: string, maxSize: number = DEFAULT_LIMITS.maxFileSize): Promise<{ content: string; error?: string }> => {
   try {
-    // Validate path
     const pathValidation = validateAndSanitizePath(filePath, baseDir);
     if (!pathValidation.isValid) {
       return { content: '', error: pathValidation.error };
     }
 
-    // Validate file size
     const sizeValidation = await validateFileSize(pathValidation.sanitizedValue!, maxSize);
     if (!sizeValidation.isValid) {
       return { content: '', error: sizeValidation.error };
     }
 
-    // Read file with timeout
     const content = await withTimeout(
       promisify(fs.readFile)(pathValidation.sanitizedValue!, 'utf-8'),
       DEFAULT_LIMITS.timeoutMs
@@ -351,9 +260,6 @@ export const safeReadFile = async (filePath: string, baseDir: string, maxSize: n
   }
 };
 
-/**
- * Validates API key format (basic validation)
- */
 export const validateApiKey = (apiKey: string): ValidationResult => {
   if (!apiKey || typeof apiKey !== 'string') {
     return {
@@ -378,7 +284,6 @@ export const validateApiKey = (apiKey: string): ValidationResult => {
     };
   }
 
-  // Basic format validation for Gemini API keys
   if (!/^[A-Za-z0-9_-]+$/.test(trimmed)) {
     return {
       isValid: false,
@@ -392,12 +297,8 @@ export const validateApiKey = (apiKey: string): ValidationResult => {
   };
 };
 
-/**
- * Sanitizes error messages to prevent information leakage
- */
 export const sanitizeError = (error: any): string => {
   if (typeof error === 'string') {
-    // Remove potential sensitive information
     return error
       .replace(/api[_-]?key[=:]\s*[^\s]+/gi, 'api_key=***')
       .replace(/token[=:]\s*[^\s]+/gi, 'token=***')
@@ -412,17 +313,11 @@ export const sanitizeError = (error: any): string => {
   return 'An unknown error occurred';
 };
 
-/**
- * Validates that a directory is a git repository safely
- */
 export const validateGitRepository = async (dir: string): Promise<ValidationResult> => {
   try {
     const gitDir = path.join(dir, '.git');
-
-    // Check if .git directory exists and is accessible
     await access(gitDir, fs.constants.R_OK);
 
-    // Check if it's actually a git repository by looking for HEAD file
     const headFile = path.join(gitDir, 'HEAD');
     await access(headFile, fs.constants.R_OK);
 
