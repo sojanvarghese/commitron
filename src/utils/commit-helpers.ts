@@ -1,14 +1,5 @@
-/// <reference path="../types/global.d.ts" />
+import { GitDiff, CommitType, PlaywrightPatterns } from '../types/common.js';
 
-import { GitDiff, CommitType, PlaywrightPatterns } from '../types/index.js';
-
-/**
- * Utility functions for commit message processing and analysis
- */
-
-/**
- * Analyzes Playwright-specific patterns in file paths
- */
 export const analyzePlaywrightPatterns = (filePath: string): PlaywrightPatterns => {
   const lowerPath = filePath.toLowerCase();
   const fileName = filePath.split('/').pop()?.toLowerCase() || '';
@@ -30,9 +21,7 @@ export const analyzePlaywrightPatterns = (filePath: string): PlaywrightPatterns 
   };
 };
 
-/**
- * Determines the most appropriate commit type based on file changes
- */
+
 export const analyzeCommitType = (diffs: GitDiff[]): CommitType => {
   const filePatterns = diffs.map(diff => {
     const playwrightPatterns = analyzePlaywrightPatterns(diff.file);
@@ -52,7 +41,6 @@ export const analyzeCommitType = (diffs: GitDiff[]): CommitType => {
     };
   });
 
-  // Determine commit type based on file patterns (prioritize E2E detection)
   if (filePatterns.every(p => p.isE2E)) return CommitType.E2E;
   if (filePatterns.every(p => p.hasTests)) return CommitType.TEST;
   if (filePatterns.every(p => p.isDocs)) return CommitType.DOCS;
@@ -61,16 +49,13 @@ export const analyzeCommitType = (diffs: GitDiff[]): CommitType => {
   if (filePatterns.every(p => p.isCI)) return CommitType.CI;
   if (filePatterns.some(p => p.isNew)) return CommitType.FEAT;
 
-  return CommitType.CHORE; // Default fallback
+    return CommitType.CHORE;
 };
 
-/**
- * Extracts scope from file path for conventional commits
- */
+
 export const extractScope = (filePath: string): string | undefined => {
   const pathParts = filePath.split('/');
 
-  // Extract meaningful scope from path
   if (pathParts.includes('src')) {
     const srcIndex = pathParts.indexOf('src');
     if (pathParts[srcIndex + 1]) {
@@ -78,7 +63,6 @@ export const extractScope = (filePath: string): string | undefined => {
     }
   }
 
-  // Common scope patterns including Playwright
   if (filePath.includes('auth')) return 'auth';
   if (filePath.includes('api')) return 'api';
   if (filePath.includes('ui') || filePath.includes('component')) return 'ui';
@@ -91,15 +75,12 @@ export const extractScope = (filePath: string): string | undefined => {
   return undefined;
 };
 
-/**
- * Generates a meaningful description based on file changes
- */
+
 export const generateDescription = (diff: GitDiff): string => {
   const { file, isNew, isDeleted, isRenamed, additions, deletions } = diff;
   const fileName = file.split('/').pop() || file;
   const playwrightPatterns = analyzePlaywrightPatterns(file);
 
-  // Capitalize first letter helper
   const capitalize = (str: string) => str.charAt(0).toUpperCase() + str.slice(1);
 
   if (isDeleted) {
@@ -132,7 +113,6 @@ export const generateDescription = (diff: GitDiff): string => {
     return capitalize(`Renamed ${diff.oldPath} to ${file}`);
   }
 
-  // Analyze the nature of changes with Playwright context
   const netChange = additions - deletions;
 
   if (playwrightPatterns.isPOM) {
@@ -155,7 +135,6 @@ export const generateDescription = (diff: GitDiff): string => {
     return capitalize(`Updated Playwright configuration settings`);
   }
 
-  // General change analysis
   if (netChange > 50) {
     return capitalize(`Significantly enhanced ${fileName}`);
   } else if (netChange > 10) {
@@ -167,9 +146,7 @@ export const generateDescription = (diff: GitDiff): string => {
   }
 };
 
-/**
- * Formats commit message according to conventional commits
- */
+
 export const formatConventionalCommit = (
   type: CommitType,
   scope: string | undefined,
@@ -179,28 +156,23 @@ export const formatConventionalCommit = (
   return `${type}${scopeStr}: ${description}`;
 };
 
-/**
- * Validates if a commit message follows best practices
- */
+
 export const validateCommitMessage = (message: string): { valid: boolean; suggestions: string[] } => {
   const suggestions: string[] = [];
 
-  // Check for past tense
   const firstWord = message.split(' ')[0].toLowerCase();
   const pastTenseWords = ['added', 'fixed', 'updated', 'removed', 'refactored', 'improved', 'enhanced'];
   const presentTenseWords = ['add', 'fix', 'update', 'remove', 'refactor', 'improve', 'enhance'];
 
   if (presentTenseWords.includes(firstWord)) {
-    suggestions.push(`Use past tense: "${firstWord}ed" instead of "${firstWord}"`);
+    suggestions.push(`Use past tense: "${firstWord}ed" instead of "${firstWord} eg: ${pastTenseWords.join(', ')}"`);
   }
 
-  // Check for specificity
   const vagueWords = ['updated', 'changed', 'modified', 'fixed'];
   if (vagueWords.some(word => message.toLowerCase().includes(word)) && message.length < 30) {
     suggestions.push('Be more specific about what was updated/changed/fixed');
   }
 
-  // Check length
   if (message.length > 72) {
     suggestions.push('Keep first line under 72 characters');
   }
