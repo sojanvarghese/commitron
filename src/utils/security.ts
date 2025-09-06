@@ -57,7 +57,7 @@ export const validateAndSanitizePath = (filePath: string, baseDir: string): Vali
       /\/\//, // Double slashes
       /\\\\/, // Double backslashes
       /[<>:"|?*]/, // Invalid characters
-      /^\./, // Hidden files (optional - might be legitimate)
+      // Note: Removed /^\./ pattern to allow legitimate hidden files like .eslintrc.cjs
     ];
 
     for (const pattern of suspiciousPatterns) {
