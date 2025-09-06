@@ -382,7 +382,7 @@ export class GitService {
           DEFAULT_LIMITS.timeoutMs
         );
       }, { operation: 'push' });
-    }, 3, 2000, { operation: 'push' });
+    }, 3, 500, { operation: 'push' });
   }
 
   /**
