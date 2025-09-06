@@ -49,6 +49,23 @@ export class GitService {
     const status = await this.git.status();
 
     try {
+      // Handle deleted files differently
+      const isDeleted = status.deleted.includes(file);
+
+      if (isDeleted && !staged) {
+        // For deleted files, we can't get a normal diff, so provide basic info
+        return {
+          file,
+          additions: 0,
+          deletions: 1, // Assume at least one deletion (the file itself)
+          changes: `File deleted: ${file}`,
+          isNew: false,
+          isDeleted: true,
+          isRenamed: false,
+          oldPath: undefined
+        };
+      }
+
       const diffArgs = staged ? ['--cached', file] : [file];
       const diff = await this.git.diff(diffArgs);
       const diffSummary = await this.git.diffSummary(diffArgs);
