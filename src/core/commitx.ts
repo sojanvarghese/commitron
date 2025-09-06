@@ -195,7 +195,6 @@ export class CommitX {
 
       spinner.text = 'Generating commit messages...';
 
-      // Generate suggestions using AI
       const suggestions = await this.aiService.generateCommitMessage(diffs);
 
       spinner.succeed(`Generated ${suggestions.length} commit message suggestions`);
