@@ -123,6 +123,7 @@ export class CommitX {
 
     // Push if requested
     console.log('DEBUG: options.push =', options.push, 'autoPush =', this.config.get('autoPush'));
+    console.log('DEBUG: condition =', options.push || this.config.get('autoPush'));
     if (options.push || this.config.get('autoPush')) {
       const pushSpinner = ora('Pushing to remote...').start();
       try {
