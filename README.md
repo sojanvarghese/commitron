@@ -422,12 +422,8 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ---
 
-## 📞 Support
-
-- 🐛 [Report Bugs](https://github.com/yourusername/commit-x/issues)
-- 💬 [Discussions](https://github.com/yourusername/commit-x/discussions)
-- 📧 [Email Support](mailto:support@commit-x.dev)
+- 🐛 [Report Bugs](https://github.com/sojanvarghese/commit-x/issues)
 
 ---
 
-**Made with ❤️ by developers, for developers.**
+**Made with ❤️ by Sojan with the help of Cursor, for developers.**
