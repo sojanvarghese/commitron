@@ -28,7 +28,7 @@ export const DEFAULT_LIMITS: ResourceLimits = {
   maxFileSize: 10 * 1024 * 1024, // 10MB
   maxDiffSize: 50000, // 50KB
   maxApiRequestSize: 100000, // 100KB
-  timeoutMs: 30000 // 30 seconds
+  timeoutMs: 10000 // Reduced from 30 seconds to 10 seconds
 };
 
 /**
