@@ -19,13 +19,13 @@ help:
 # Build the project
 build:
 	@echo "🔧 Building TypeScript..."
-	npm run build
+	yarn build
 	chmod +x dist/cli.js
 
 # Install dependencies
 install:
-	@echo "📦 Installing dependencies..."
-	npm install
+	@echo "📦 Installing dependencies with Yarn..."
+	yarn install
 
 # Clean build artifacts
 clean:
@@ -36,22 +36,22 @@ clean:
 # Development mode
 dev:
 	@echo "🚀 Starting development mode..."
-	npm run dev
+	yarn dev
 
 # Run tests
 test:
 	@echo "🧪 Running tests..."
-	npm test
+	yarn test
 
 # Run linter
 lint:
 	@echo "🔍 Running ESLint..."
-	npm run lint
+	yarn lint
 
 # Format code
 format:
 	@echo "✨ Formatting code..."
-	npm run format
+	yarn format
 
 # Setup (install + build)
 setup: install build
@@ -59,4 +59,4 @@ setup: install build
 	@echo ""
 	@echo "Next steps:"
 	@echo "1. Set your API key: export GEMINI_API_KEY=your_key"
-	@echo "2. Run: ./start.sh or node dist/cli.js"
+	@echo "2. Run: yarn start or node dist/cli.js"
