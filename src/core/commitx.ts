@@ -48,8 +48,6 @@ export class CommitX {
         return;
       }
 
-      console.log(chalk.blue(`\n🔍 Found ${unstagedFiles.length} changed file(s). Processing individually...\n`));
-
       // Process each file individually (non-interactive by default)
       let processedCount = 0;
       for (const file of unstagedFiles) {
@@ -59,12 +57,14 @@ export class CommitX {
             processedCount++;
           }
         } catch (error) {
-          console.error(chalk.red(`Failed to process ${file}: ${error}`));
-          console.log(chalk.yellow(`Continuing with remaining files...`));
+          const fileName = file.split('/').pop() || file;
+          console.error(chalk.red(`Failed to process ${fileName}: ${error}`));
         }
       }
 
-      console.log(chalk.green(`\n✅ Successfully processed ${processedCount} of ${unstagedFiles.length} files`));
+      if (processedCount > 0) {
+        console.log(chalk.green(`\n✅ Successfully processed ${processedCount} of ${unstagedFiles.length} files`));
+      }
 
     } catch (error) {
       console.error(chalk.red(`Error: ${error}`));
@@ -138,42 +138,37 @@ export class CommitX {
    */
   private commitIndividualFile = async (file: string, options: CommitOptions): Promise<boolean> => {
     try {
-      console.log(chalk.cyan(`📄 Processing: ${file}`));
+      // Extract just the filename from the full path
+      const fileName = file.split('/').pop() || file;
+      console.log(chalk.cyan(`Processing: ${fileName}`));
 
       // Get diff for this specific file
       const fileDiff = await this.gitService.getFileDiff(file, false);
 
       // Dry run check
       if (options.dryRun) {
-        console.log(chalk.blue(`  Would stage and commit: ${file}`));
+        console.log(chalk.blue(`  Would stage and commit: ${fileName}`));
         console.log(chalk.gray(`  Changes: +${fileDiff.additions}/-${fileDiff.deletions}`));
         return true;
       }
 
-      // Stage the file
-      const stageSpinner = ora(`Staging ${file}...`).start();
+      // Stage the file (silent)
       await this.gitService.stageFile(file);
-      stageSpinner.succeed(`Staged ${file}`);
 
-      // Generate commit message for this file
-      const messageSpinner = ora('Generating commit message...').start();
+      // Generate commit message for this file (silent)
       const suggestions = await this.aiService.generateCommitMessage([fileDiff]);
-      messageSpinner.succeed('Generated commit message');
 
       // Automatically use the best AI-generated commit message
-      const commitMessage = suggestions[0]?.message || `Update ${file}`;
+      const commitMessage = suggestions[0]?.message || `Update ${fileName}`;
 
-      console.log(chalk.blue(`  Selected: ${commitMessage}`));
-
-      // Commit the file
-      const commitSpinner = ora(`Committing ${file}...`).start();
+      // Commit the file (silent)
       await this.gitService.commit(commitMessage);
-      commitSpinner.succeed(`✅ Committed: ${chalk.green(commitMessage)}`);
+      console.log(chalk.green(`✅ Committed: ${commitMessage}`));
 
       return true;
 
     } catch (error) {
-      console.error(chalk.red(`  Failed to process ${file}: ${error}`));
+      console.error(chalk.red(`  Failed to process ${file.split('/').pop()}: ${error}`));
       return false;
     }
   }
