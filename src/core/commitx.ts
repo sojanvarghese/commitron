@@ -1,13 +1,11 @@
-/// <reference path="../types/global.d.ts" />
-
 import chalk from 'chalk';
 import ora from 'ora';
 import inquirer from 'inquirer';
 import process from 'process';
 import { GitService } from '../services/git.js';
 import { AIService } from '../services/ai.js';
-import { ConfigManager } from '../config/index.js';
-import { CommitOptions, CommitSuggestion } from '../types/index.js';
+import { ConfigManager } from '../config.js';
+import { CommitOptions, CommitSuggestion } from '../types/common.js';
 
 export class CommitX {
   private gitService: GitService;
@@ -17,12 +15,8 @@ export class CommitX {
   constructor() {
     this.gitService = new GitService();
     this.config = ConfigManager.getInstance();
-    // AIService will be lazily loaded when needed
   }
 
-  /**
-   * Get AI service instance (lazy loading)
-   */
   private getAIService(): AIService {
     if (!this.aiService) {
       try {
@@ -34,22 +28,17 @@ export class CommitX {
     return this.aiService;
   }
 
-  /**
-   * Main commit flow - now processes files individually
-   */
+
   async commit(options: CommitOptions = {}): Promise<void> {
     try {
-      // Check if we're in a git repository
       if (!(await this.gitService.isGitRepository())) {
         throw new Error('Not a git repository. Please run this command from within a git repository.');
       }
 
-      // If a specific message is provided or --all flag is used, use traditional workflow
       if (options.message || options.all) {
         return this.commitTraditional(options);
       }
 
-      // Get unstaged files for individual processing
       const unstagedFiles = await this.gitService.getUnstagedFiles();
 
       if (unstagedFiles.length === 0) {
@@ -57,7 +46,6 @@ export class CommitX {
         return;
       }
 
-      // Process each file individually (non-interactive by default)
       let processedCount = 0;
       for (const file of unstagedFiles) {
         try {
@@ -81,9 +69,7 @@ export class CommitX {
     }
   }
 
-  /**
-   * Traditional commit workflow when message is provided or --all flag is used
-   */
+
   private async commitTraditional(options: CommitOptions): Promise<void> {
     const status = await this.gitService.getStatus();
 
@@ -104,7 +90,6 @@ export class CommitX {
       }
     }
 
-    // Generate commit message if not provided (when using --all flag)
     let commitMessage: string;
 
     if (options.message) {
@@ -118,19 +103,16 @@ export class CommitX {
       return;
     }
 
-    // Dry run check
     if (options.dryRun) {
       console.log(chalk.blue('Dry run - would commit with message:'));
       console.log(chalk.white(`"${commitMessage}"`));
       return;
     }
 
-    // Commit changes
     const commitSpinner = ora('Creating commit...').start();
     await this.gitService.commit(commitMessage);
     commitSpinner.succeed(`Committed: ${chalk.green(commitMessage)}`);
 
-    // Push if explicitly requested (disabled autoPush to prevent unwanted pushes)
     if (options.push === true) {
       const pushSpinner = ora('Pushing to remote...').start();
       try {
@@ -142,35 +124,26 @@ export class CommitX {
     }
   }
 
-  /**
-   * Process and commit an individual file
-   */
+
   private commitIndividualFile = async (file: string, options: CommitOptions): Promise<boolean> => {
     try {
-      // Extract just the filename from the full path
       const fileName = file.split('/').pop() || file;
       console.log(chalk.cyan(`Processing: ${fileName}`));
 
-      // Get diff for this specific file
       const fileDiff = await this.gitService.getFileDiff(file, false);
 
-      // Dry run check
       if (options.dryRun) {
         console.log(chalk.blue(`  Would stage and commit: ${fileName}`));
         console.log(chalk.gray(`  Changes: +${fileDiff.additions}/-${fileDiff.deletions}`));
         return true;
       }
 
-      // Stage the file (silent)
       await this.gitService.stageFile(file);
 
-      // Generate commit message for this file (silent)
       const suggestions = await this.getAIService().generateCommitMessage([fileDiff]);
 
-      // Automatically use the best AI-generated commit message
       const commitMessage = suggestions[0]?.message || `Update ${fileName}`;
 
-      // Commit the file (silent)
       await this.gitService.commit(commitMessage);
       console.log(chalk.green(`✅ Committed: ${commitMessage}`));
 
@@ -182,14 +155,11 @@ export class CommitX {
     }
   }
 
-  /**
-   * Generate commit message using AI
-   */
+
   private generateCommitMessage = async (interactive: boolean = true): Promise<string> => {
     const spinner = ora('Analyzing changes...').start();
 
     try {
-      // Get staged changes
       const diffs = await this.gitService.getStagedDiff();
 
       if (diffs.length === 0) {
@@ -204,11 +174,9 @@ export class CommitX {
       spinner.succeed(`Generated ${suggestions.length} commit message suggestions`);
 
       if (!interactive || !process.stdin.isTTY) {
-        // Non-interactive mode - return the best suggestion
         return suggestions[0]?.message || '';
       }
 
-      // Interactive mode - let user choose
       return await this.promptCommitSelection(suggestions);
 
     } catch (error) {
@@ -217,9 +185,7 @@ export class CommitX {
     }
   }
 
-  /**
-   * Prompt user to select a commit message
-   */
+
   private promptCommitSelection = async (suggestions: CommitSuggestion[], file?: string): Promise<string> => {
     const choices = suggestions.map((suggestion, index) => ({
       name: `${chalk.green(suggestion.message)}${suggestion.description ? chalk.gray(` - ${suggestion.description}`) : ''}`,
@@ -231,7 +197,6 @@ export class CommitX {
       { name: chalk.blue('✏️  Write custom message'), value: 'custom', short: 'Custom' }
     );
 
-    // Add skip option for individual file processing
     if (file) {
       choices.push({ name: chalk.yellow('⏭️  Skip this file'), value: 'skip', short: 'Skip' });
     }
@@ -281,9 +246,7 @@ export class CommitX {
     return selected;
   }
 
-  /**
-   * Prompt user to stage files
-   */
+
   private async promptStageFiles(status: { unstaged: string[]; untracked: string[] }): Promise<boolean> {
     console.log(chalk.yellow('\nUnstaged changes detected:'));
 
@@ -309,9 +272,7 @@ export class CommitX {
     return shouldStage;
   }
 
-  /**
-   * Show repository status
-   */
+
   async status(): Promise<void> {
     try {
       if (!(await this.gitService.isGitRepository())) {
@@ -361,9 +322,6 @@ export class CommitX {
     }
   }
 
-  /**
-   * Show changes summary
-   */
   async diff(): Promise<void> {
     try {
       if (!(await this.gitService.isGitRepository())) {
