@@ -14,8 +14,10 @@
     "start": "node dist/cli.js",
     "test": "jest",
     "lint": "eslint src/**/*.ts",
-    "format": "prettier --write src/**/*.ts"
+    "format": "prettier --write src/**/*.ts",
+    "clean": "rm -rf node_modules yarn.lock"
   },
+  "packageManager": "yarn@4.0.0",
   "keywords": [
     "git",
     "commit",
