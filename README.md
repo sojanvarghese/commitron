@@ -200,7 +200,7 @@ commit-x help-examples
 | `customPrompt` | string | - | Custom AI prompt template |
 
 ### Configuration File Location
-
+<!--  -->
 CommitX stores its configuration in:
 - **macOS/Linux:** `~/.commit-x/config.json`
 - **Windows:** `%USERPROFILE%\.commit-x\config.json`
