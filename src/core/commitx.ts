@@ -122,6 +122,7 @@ export class CommitX {
     commitSpinner.succeed(`Committed: ${chalk.green(commitMessage)}`);
 
     // Push if requested
+    console.log('DEBUG: options.push =', options.push, 'autoPush =', this.config.get('autoPush'));
     if (options.push || this.config.get('autoPush')) {
       const pushSpinner = ora('Pushing to remote...').start();
       try {
