@@ -1,23 +1,20 @@
 import simpleGit, { SimpleGit, DiffResult } from 'simple-git';
-import { GitDiff, GitStatus } from '../types/index.js';
+import { GitDiff, GitStatus } from '../types/common.js';
 import {
   validateAndSanitizePath,
-  validateFileSize,
   validateDiffSize,
   withTimeout,
-  safeReadFile,
   validateGitRepository,
   validateCommitMessage,
-  DEFAULT_LIMITS
 } from '../utils/security.js';
+import { ErrorType } from '../types/error-handler.js';
 import {
   ErrorHandler,
-  ErrorType,
   withErrorHandling,
   withRetry,
   SecureError
 } from '../utils/error-handler.js';
-import * as path from 'path';
+import { GIT_TIMEOUT_MS, GIT_RETRY_ATTEMPTS, GIT_RETRY_DELAY_MS, GIT_DEFAULT_BRANCH } from '../constants/git.js';
 
 export class GitService {
   private git: SimpleGit;
@@ -30,9 +27,7 @@ export class GitService {
     this.repositoryPath = process.cwd();
   }
 
-  /**
-   * Check if we're in a git repository with security validation
-   */
+
   isGitRepository = async (): Promise<boolean> => {
     return withErrorHandling(async () => {
       const validation = await validateGitRepository(this.repositoryPath);
@@ -48,17 +43,14 @@ export class GitService {
     }, { operation: 'isGitRepository' });
   }
 
-  /**
-   * Get the current repository status with security validation
-   */
+
   getStatus = async (): Promise<GitStatus> => {
     return withErrorHandling(async () => {
       const status = await withTimeout(
         this.git.status(),
-        DEFAULT_LIMITS.timeoutMs
+        GIT_TIMEOUT_MS
       );
-
-      // Validate and sanitize file paths
+  
       const staged = this.validateFilePaths(status.staged);
       const unstaged = this.validateFilePaths(status.modified);
       const untracked = this.validateFilePaths(status.not_added);
@@ -72,9 +64,7 @@ export class GitService {
     }, { operation: 'getStatus' });
   }
 
-  /**
-   * Validate and sanitize file paths
-   */
+
   private validateFilePaths = (filePaths: string[]): string[] => {
     const validPaths: string[] = [];
 
@@ -90,14 +80,12 @@ export class GitService {
     return validPaths;
   };
 
-  /**
-   * Get all unstaged and untracked files with security validation
-   */
+
   getUnstagedFiles = async (): Promise<string[]> => {
     return withErrorHandling(async () => {
       const status = await withTimeout(
         this.git.status(),
-        DEFAULT_LIMITS.timeoutMs
+        GIT_TIMEOUT_MS
       );
 
       const allFiles = [...status.modified, ...status.not_added, ...status.deleted];
@@ -105,12 +93,9 @@ export class GitService {
     }, { operation: 'getUnstagedFiles' });
   }
 
-  /**
-   * Get diff for a specific file (staged or unstaged) with security validation
-   */
+
   getFileDiff = async (file: string, staged: boolean = false): Promise<GitDiff> => {
     return withErrorHandling(async () => {
-      // Validate file path first
       const pathValidation = validateAndSanitizePath(file, this.repositoryPath);
       if (!pathValidation.isValid) {
         throw new SecureError(
@@ -124,19 +109,17 @@ export class GitService {
       const validatedFile = pathValidation.sanitizedValue!;
       const status = await withTimeout(
         this.git.status(),
-        DEFAULT_LIMITS.timeoutMs
+        GIT_TIMEOUT_MS
       );
 
       try {
-        // Handle deleted files differently
         const isDeleted = status.deleted.includes(file);
 
         if (isDeleted && !staged) {
-          // For deleted files, we can't get a normal diff, so provide basic info
           return {
             file: validatedFile,
             additions: 0,
-            deletions: 1, // Assume at least one deletion (the file itself)
+            deletions: 1,
             changes: `File deleted: ${validatedFile}`,
             isNew: false,
             isDeleted: true,
@@ -148,14 +131,13 @@ export class GitService {
         const diffArgs = staged ? ['--cached', validatedFile] : [validatedFile];
         const diff = await withTimeout(
           this.git.diff(diffArgs),
-          DEFAULT_LIMITS.timeoutMs
+          GIT_TIMEOUT_MS
         );
         const diffSummary = await withTimeout(
           this.git.diffSummary(diffArgs),
-          DEFAULT_LIMITS.timeoutMs
+          GIT_TIMEOUT_MS
         );
 
-        // Validate diff size
         const diffValidation = validateDiffSize(diff);
         if (!diffValidation.isValid) {
           throw new SecureError(
@@ -179,7 +161,6 @@ export class GitService {
           oldPath: status.renamed.find((r: any) => r.to === file)?.from
         };
       } catch (error) {
-        // Return minimal diff info for failed operations
         return {
           file: validatedFile,
           additions: 0,
@@ -194,14 +175,12 @@ export class GitService {
     }, { operation: 'getFileDiff', file });
   }
 
-  /**
-   * Get staged changes for commit message generation with security validation
-   */
+
   async getStagedDiff(): Promise<GitDiff[]> {
     return withErrorHandling(async () => {
       const status = await withTimeout(
         this.git.status(),
-        DEFAULT_LIMITS.timeoutMs
+        GIT_TIMEOUT_MS
       );
 
       if (status.staged.length === 0) {
@@ -220,14 +199,13 @@ export class GitService {
         try {
           const diff = await withTimeout(
             this.git.diff(['--cached', file]),
-            DEFAULT_LIMITS.timeoutMs
+            GIT_TIMEOUT_MS
           );
           const diffSummary = await withTimeout(
             this.git.diffSummary(['--cached', file]),
-            DEFAULT_LIMITS.timeoutMs
+            GIT_TIMEOUT_MS
           );
 
-          // Validate diff size
           const diffValidation = validateDiffSize(diff);
           if (!diffValidation.isValid) {
             console.warn(`Diff too large for ${file}, skipping content`);
@@ -255,9 +233,6 @@ export class GitService {
     }, { operation: 'getStagedDiff' });
   }
 
-  /**
-   * Get a summary of changes for AI context
-   */
   async getChangesSummary(): Promise<string> {
     const diffs = await this.getStagedDiff();
 
@@ -288,21 +263,15 @@ export class GitService {
     return summary;
   }
 
-  /**
-   * Stage all changes with security validation
-   */
   async stageAll(): Promise<void> {
     return withErrorHandling(async () => {
       await withTimeout(
         this.git.add('.'),
-        DEFAULT_LIMITS.timeoutMs
+        GIT_TIMEOUT_MS
       );
     }, { operation: 'stageAll' });
   }
 
-  /**
-   * Stage specific files with security validation
-   */
   async stageFiles(files: string[]): Promise<void> {
     return withErrorHandling(async () => {
       const validatedFiles = this.validateFilePaths(files);
@@ -316,14 +285,11 @@ export class GitService {
       }
       await withTimeout(
         this.git.add(validatedFiles),
-        DEFAULT_LIMITS.timeoutMs
+        GIT_TIMEOUT_MS
       );
     }, { operation: 'stageFiles' });
   }
 
-  /**
-   * Stage a single file with security validation
-   */
   async stageFile(file: string): Promise<void> {
     return withErrorHandling(async () => {
       const pathValidation = validateAndSanitizePath(file, this.repositoryPath);
@@ -337,17 +303,13 @@ export class GitService {
       }
       await withTimeout(
         this.git.add(pathValidation.sanitizedValue!),
-        DEFAULT_LIMITS.timeoutMs
+        GIT_TIMEOUT_MS
       );
     }, { operation: 'stageFile', file });
   }
 
-  /**
-   * Commit changes with message and security validation
-   */
   async commit(message: string): Promise<void> {
     return withErrorHandling(async () => {
-      // Validate commit message
       const messageValidation = validateCommitMessage(message);
       if (!messageValidation.isValid) {
         throw new SecureError(
@@ -360,34 +322,28 @@ export class GitService {
 
       await withTimeout(
         this.git.commit(messageValidation.sanitizedValue!),
-        DEFAULT_LIMITS.timeoutMs
+        GIT_TIMEOUT_MS
       );
     }, { operation: 'commit' });
   }
 
-  /**
-   * Push changes to remote with retry mechanism
-   */
   async push(): Promise<void> {
     return withRetry(async () => {
       return withErrorHandling(async () => {
         const status = await withTimeout(
           this.git.status(),
-          DEFAULT_LIMITS.timeoutMs
+          GIT_TIMEOUT_MS
         );
-        const branch = status.current || 'main';
+        const branch = status.current || GIT_DEFAULT_BRANCH;
 
         await withTimeout(
           this.git.push('origin', branch),
-          DEFAULT_LIMITS.timeoutMs
+          GIT_TIMEOUT_MS
         );
       }, { operation: 'push' });
-    }, 3, 500, { operation: 'push' });
+    }, GIT_RETRY_ATTEMPTS, GIT_RETRY_DELAY_MS, { operation: 'push' });
   }
 
-  /**
-   * Get the last commit message for context
-   */
   async getLastCommitMessage(): Promise<string | null> {
     try {
       const log = await this.git.log({ maxCount: 1 });
@@ -397,9 +353,6 @@ export class GitService {
     }
   }
 
-  /**
-   * Get repository information
-   */
   async getRepoInfo(): Promise<{ name: string; branch: string }> {
     const status = await this.git.status();
     const remotes = await this.git.getRemotes(true);
@@ -417,7 +370,7 @@ export class GitService {
 
     return {
       name: repoName,
-      branch: status.current || 'main'
+      branch: status.current || GIT_DEFAULT_BRANCH
     };
   }
 }
