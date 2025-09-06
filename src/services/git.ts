@@ -11,7 +11,7 @@ export class GitService {
   /**
    * Check if we're in a git repository
    */
-  async isGitRepository(): Promise<boolean> {
+  isGitRepository = async (): Promise<boolean> => {
     try {
       await this.git.status();
       return true;
@@ -23,7 +23,7 @@ export class GitService {
   /**
    * Get the current repository status
    */
-  async getStatus(): Promise<GitStatus> {
+  getStatus = async (): Promise<GitStatus> => {
     const status = await this.git.status();
 
     return {
@@ -37,7 +37,7 @@ export class GitService {
   /**
    * Get all unstaged and untracked files
    */
-  async getUnstagedFiles(): Promise<string[]> {
+  getUnstagedFiles = async (): Promise<string[]> => {
     const status = await this.git.status();
     return [...status.modified, ...status.not_added];
   }
@@ -45,7 +45,7 @@ export class GitService {
   /**
    * Get diff for a specific file (staged or unstaged)
    */
-  async getFileDiff(file: string, staged: boolean = false): Promise<GitDiff> {
+  getFileDiff = async (file: string, staged: boolean = false): Promise<GitDiff> => {
     const status = await this.git.status();
 
     try {
