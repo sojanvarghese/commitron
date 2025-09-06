@@ -22,23 +22,25 @@ fi
 
 echo "✅ Node.js $(node -v) detected"
 
-# Check if npm is available
-if ! command -v npm &> /dev/null; then
-    echo "❌ npm is not available. Please install npm."
+# Check for Yarn
+if ! command -v yarn &> /dev/null; then
+    echo "❌ Yarn is not installed. Please install Yarn first:"
+    echo "   npm install -g yarn"
+    echo "   or visit: https://yarnpkg.com/getting-started/install"
     exit 1
 fi
 
-echo "✅ npm $(npm -v) detected"
+echo "✅ Yarn $(yarn --version) detected"
 
 # Install dependencies
 echo ""
-echo "📦 Installing dependencies..."
-npm install
+echo "📦 Installing dependencies with Yarn..."
+yarn install
 
 # Build the project
 echo ""
 echo "🔧 Building TypeScript..."
-npm run build
+yarn build
 
 # Make CLI executable
 echo ""
@@ -50,11 +52,11 @@ echo ""
 read -p "🌍 Link CommitX globally? This allows you to use 'commit-x' from anywhere (y/N): " -n 1 -r
 echo
 if [[ $REPLY =~ ^[Yy]$ ]]; then
-    npm link
-    echo "✅ CommitX linked globally"
+    yarn global add file:.
+    echo "✅ CommitX linked globally with Yarn"
     echo "   You can now use: commit-x or cx"
 else
-    echo "ℹ️  To use CommitX, run: npm start or node dist/cli.js"
+    echo "ℹ️  To use CommitX, run: yarn start or node dist/cli.js"
 fi
 
 # Check for API key
