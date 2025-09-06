@@ -136,7 +136,7 @@ export class CommitX {
   /**
    * Process and commit an individual file
    */
-  private async commitIndividualFile(file: string, options: CommitOptions): Promise<boolean> {
+  private commitIndividualFile = async (file: string, options: CommitOptions): Promise<boolean> => {
     try {
       console.log(chalk.cyan(`📄 Processing: ${file}`));
 
@@ -181,7 +181,7 @@ export class CommitX {
   /**
    * Generate commit message using AI
    */
-  private async generateCommitMessage(interactive: boolean = true): Promise<string> {
+  private generateCommitMessage = async (interactive: boolean = true): Promise<string> => {
     const spinner = ora('Analyzing changes...').start();
 
     try {
@@ -216,7 +216,7 @@ export class CommitX {
   /**
    * Prompt user to select a commit message
    */
-  private async promptCommitSelection(suggestions: CommitSuggestion[], file?: string): Promise<string> {
+  private promptCommitSelection = async (suggestions: CommitSuggestion[], file?: string): Promise<string> => {
     const choices = suggestions.map((suggestion, index) => ({
       name: `${chalk.green(suggestion.message)}${suggestion.description ? chalk.gray(` - ${suggestion.description}`) : ''}`,
       value: suggestion.message,
