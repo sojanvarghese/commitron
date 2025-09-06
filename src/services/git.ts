@@ -39,7 +39,7 @@ export class GitService {
    */
   getUnstagedFiles = async (): Promise<string[]> => {
     const status = await this.git.status();
-    return [...status.modified, ...status.not_added];
+    return [...status.modified, ...status.not_added, ...status.deleted];
   }
 
   /**
