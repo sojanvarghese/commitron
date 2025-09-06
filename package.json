@@ -27,31 +27,53 @@
     "typescript",
     "automation"
   ],
-  "author": "Sojan Varghese",
+  "author": {
+    "name": "Sojan Varghese",
+    "email": "sojan@example.com",
+    "url": "https://github.com/sojanvarghese"
+  },
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/sojanvarghese/commit-x.git"
+  },
+  "bugs": {
+    "url": "https://github.com/sojanvarghese/commit-x/issues"
+  },
+  "homepage": "https://github.com/sojanvarghese/commit-x#readme",
   "dependencies": {
     "@google/generative-ai": "^0.21.0",
-    "commander": "^12.0.0",
     "chalk": "^4.1.2",
-    "ora": "^5.4.1",
+    "commander": "^12.1.0",
+    "dotenv": "^16.4.5",
     "inquirer": "^8.2.6",
-    "simple-git": "^3.25.0",
-    "dotenv": "^16.4.5"
+    "ora": "^5.4.1",
+    "simple-git": "^3.27.0"
   },
   "devDependencies": {
-    "@types/node": "^20.11.19",
     "@types/inquirer": "^8.2.10",
-    "@typescript-eslint/eslint-plugin": "^7.0.2",
-    "@typescript-eslint/parser": "^7.0.2",
-    "eslint": "^8.56.0",
+    "@types/jest": "^29.5.14",
+    "@types/node": "^20.17.0",
+    "@typescript-eslint/eslint-plugin": "^8.17.0",
+    "@typescript-eslint/parser": "^8.17.0",
+    "eslint": "^8.57.1",
     "jest": "^29.7.0",
-    "@types/jest": "^29.5.12",
-    "ts-jest": "^29.1.2",
+    "prettier": "^3.4.2",
+    "ts-jest": "^29.2.5",
     "ts-node": "^10.9.2",
-    "typescript": "^5.3.3",
-    "prettier": "^3.2.5"
+    "typescript": "^5.7.2"
   },
   "engines": {
-    "node": ">=16.0.0"
+    "node": ">=16.0.0",
+    "yarn": ">=4.0.0"
+  },
+  "files": [
+    "dist/**/*",
+    "README.md",
+    "LICENSE",
+    "package.json"
+  ],
+  "publishConfig": {
+    "access": "public"
   }
 }
