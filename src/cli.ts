@@ -12,12 +12,25 @@ import process from 'process';
 import { CommitX } from './core/commitx.js';
 import { ConfigManager } from './config/index.js';
 import { CommitConfig } from './types/index.js';
+import {
+  validateConfigKey,
+  validateConfigValue,
+  validateCommitMessage,
+  sanitizeError
+} from './utils/security.js';
+import {
+  ErrorHandler,
+  ErrorType,
+  withErrorHandling,
+  SecureError
+} from './utils/error-handler.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 const packageJson = JSON.parse(readFileSync(join(__dirname, '../package.json'), 'utf-8'));
 
 const program = new Command();
+const errorHandler = ErrorHandler.getInstance();
 
 program
   .name('commit-x')
@@ -36,7 +49,21 @@ program
   .option('--no-interactive', 'Use non-interactive mode (default for individual commits)')
   .option('--all', 'Stage all files and commit together (traditional workflow)')
   .action(async (options: { message?: string; push?: boolean; dryRun?: boolean; interactive?: boolean; all?: boolean }) => {
-    try {
+    return withErrorHandling(async () => {
+      // Validate commit message if provided
+      if (options.message) {
+        const messageValidation = validateCommitMessage(options.message);
+        if (!messageValidation.isValid) {
+          throw new SecureError(
+            messageValidation.error!,
+            ErrorType.VALIDATION_ERROR,
+            { operation: 'commit' },
+            true
+          );
+        }
+        options.message = messageValidation.sanitizedValue;
+      }
+
       const commitX = new CommitX();
 
       // Show warning if push is requested in individual mode
@@ -53,10 +80,7 @@ program
         interactive: options.interactive,
         all: options.all
       });
-    } catch (error) {
-      console.error(chalk.red(`Error: ${error}`));
-      process.exit(1);
-    }
+    }, { operation: 'commit' });
   });
 
 // Status command
@@ -65,13 +89,10 @@ program
   .alias('s')
   .description('Show repository status and changes')
   .action(async () => {
-    try {
+    return withErrorHandling(async () => {
       const commitX = new CommitX();
       await commitX.status();
-    } catch (error) {
-      console.error(chalk.red(`Error: ${error}`));
-      process.exit(1);
-    }
+    }, { operation: 'status' });
   });
 
 // Diff command
@@ -80,13 +101,10 @@ program
   .alias('d')
   .description('Show changes summary')
   .action(async () => {
-    try {
+    return withErrorHandling(async () => {
       const commitX = new CommitX();
       await commitX.diff();
-    } catch (error) {
-      console.error(chalk.red(`Error: ${error}`));
-      process.exit(1);
-    }
+    }, { operation: 'diff' });
   });
 
 // Configuration commands
@@ -98,7 +116,18 @@ configCmd
   .command('set <key> <value>')
   .description('Set configuration value')
   .action((key: string, value: string) => {
-    try {
+    withErrorHandling(() => {
+      // Validate key
+      const keyValidation = validateConfigKey(key);
+      if (!keyValidation.isValid) {
+        throw new SecureError(
+          keyValidation.error!,
+          ErrorType.VALIDATION_ERROR,
+          { operation: 'configSet', key },
+          true
+        );
+      }
+
       const config = ConfigManager.getInstance();
 
       // Parse boolean values
@@ -107,35 +136,42 @@ configCmd
       else if (value.toLowerCase() === 'false') parsedValue = false;
       else if (!isNaN(Number(value))) parsedValue = Number(value);
 
-      config.set(key as keyof CommitConfig, parsedValue);
+      config.set(keyValidation.sanitizedValue as keyof CommitConfig, parsedValue);
       console.log(chalk.green(`✅ Set ${key} = ${parsedValue}`));
-    } catch (error) {
-      console.error(chalk.red(`Error: ${error}`));
-      process.exit(1);
-    }
+    }, { operation: 'configSet', key });
   });
 
 configCmd
   .command('get [key]')
   .description('Get configuration value(s)')
   .action((key?: string) => {
-    try {
+    withErrorHandling(() => {
       const config = ConfigManager.getInstance();
 
       if (key) {
-        const value = config.get(key as keyof CommitConfig);
+        // Validate key
+        const keyValidation = validateConfigKey(key);
+        if (!keyValidation.isValid) {
+          throw new SecureError(
+            keyValidation.error!,
+            ErrorType.VALIDATION_ERROR,
+            { operation: 'configGet', key },
+            true
+          );
+        }
+
+        const value = config.get(keyValidation.sanitizedValue as keyof CommitConfig);
         console.log(`${key}: ${value}`);
       } else {
         const allConfig = config.getConfig();
         console.log(chalk.blue('Current configuration:'));
         Object.entries(allConfig).forEach(([k, v]) => {
-          console.log(`  ${k}: ${v}`);
+          // Don't show sensitive information
+          const displayValue = k === 'apiKey' ? '***' : v;
+          console.log(`  ${k}: ${displayValue}`);
         });
       }
-    } catch (error) {
-      console.error(chalk.red(`Error: ${error}`));
-      process.exit(1);
-    }
+    }, { operation: 'configGet', key });
   });
 
 configCmd
