@@ -54,8 +54,18 @@ export enum CommitType {
   REFACTOR = 'refactor',
   PERF = 'perf',
   TEST = 'test',
+  E2E = 'e2e',
   BUILD = 'build',
   CI = 'ci',
   CHORE = 'chore',
   REVERT = 'revert'
+}
+
+export interface PlaywrightPatterns {
+  isPOM: boolean;
+  isSpec: boolean;
+  isFixture: boolean;
+  isConfig: boolean;
+  isUtil: boolean;
+  testType: 'unit' | 'integration' | 'e2e' | 'unknown';
 }
