@@ -34,7 +34,7 @@ export class ConfigManager {
     return ConfigManager.instance;
   }
 
-  private loadConfig(): CommitConfig {
+  private loadConfig = (): CommitConfig => {
     try {
       // Create config directory if it doesn't exist
       if (!fs.existsSync(CONFIG_DIR)) {
@@ -53,7 +53,7 @@ export class ConfigManager {
     return DEFAULT_CONFIG;
   }
 
-  public saveConfig(config: Partial<CommitConfig>): void {
+  public saveConfig = (config: Partial<CommitConfig>): void => {
     try {
       this.config = { ...this.config, ...config };
 
