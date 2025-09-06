@@ -115,37 +115,44 @@ export class AIService {
 
     // Core principles for all commit messages
     prompt += 'IMPORTANT GUIDELINES:\n';
-    prompt += '1. Use PAST TENSE (e.g., "Added", "Fixed", "Updated", "Refactored")\n';
-    prompt += '2. Be SPECIFIC and MEANINGFUL (avoid generic messages like "Updated files" or "Fixed bug")\n';
-    prompt += '3. Focus on WHAT was changed and WHY it was necessary\n';
-    prompt += '4. Use ATOMIC approach - describe the specific change in this file\n\n';
+    prompt += '1. ALWAYS start with CAPITAL LETTER (e.g., "Added", "Fixed", "Updated", "Refactored")\n';
+    prompt += '2. Use PAST TENSE (e.g., "Added", "Fixed", "Updated", "Refactored")\n';
+    prompt += '3. Be SPECIFIC and MEANINGFUL (avoid generic messages like "Updated files" or "Fixed bug")\n';
+    prompt += '4. Focus on WHAT was changed and WHY it was necessary\n';
+    prompt += '5. Use ATOMIC approach - describe the specific change in this file\n\n';
 
     switch (config.style) {
       case 'conventional':
         prompt += 'Generate commit messages following Conventional Commits specification:\n';
-        prompt += '- Format: type(scope): past-tense description\n';
-        prompt += '- Types: feat, fix, docs, style, refactor, perf, test, build, ci, chore\n';
+        prompt += '- Format: type(scope): Past-tense description starting with capital letter\n';
+        prompt += '- Types: feat, fix, docs, style, refactor, perf, test, e2e, build, ci, chore\n';
         prompt += '- Examples:\n';
-        prompt += '  * "feat(auth): added OAuth2 integration with Google provider"\n';
-        prompt += '  * "fix(api): resolved null pointer exception in user validation"\n';
-        prompt += '  * "refactor(utils): extracted validation logic into separate module"\n';
+        prompt += '  * "feat(auth): Added OAuth2 integration with Google provider"\n';
+        prompt += '  * "fix(api): Resolved null pointer exception in user validation"\n';
+        prompt += '  * "e2e(playwright): Added page object model for login flow"\n';
+        prompt += '  * "e2e(spec): Updated E2E test assertions for checkout process"\n';
+        prompt += '  * "refactor(utils): Extracted validation logic into separate module"\n';
         break;
 
       case 'descriptive':
-        prompt += 'Generate descriptive commit messages in past tense:\n';
+        prompt += 'Generate descriptive commit messages in past tense with capital letters:\n';
         prompt += '- Clearly explain what was changed and why\n';
         prompt += '- Examples:\n';
         prompt += '  * "Added comprehensive error handling for API requests"\n';
         prompt += '  * "Refactored user authentication to use JWT tokens"\n';
+        prompt += '  * "Added E2E test spec for user registration flow"\n';
+        prompt += '  * "Updated page object model with new login selectors"\n';
         prompt += '  * "Fixed memory leak in event listener cleanup"\n';
         break;
 
       case 'minimal':
-        prompt += 'Generate concise commit messages in past tense:\n';
+        prompt += 'Generate concise commit messages in past tense with capital letters:\n';
         prompt += '- Short but meaningful descriptions\n';
         prompt += '- Examples:\n';
         prompt += '  * "Added user validation"\n';
         prompt += '  * "Fixed login bug"\n';
+        prompt += '  * "Added E2E tests"\n';
+        prompt += '  * "Updated page objects"\n';
         prompt += '  * "Updated dependencies"\n';
         break;
     }
