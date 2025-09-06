@@ -31,6 +31,7 @@
 ### Prerequisites
 
 - Node.js 16.0.0 or higher
+- Yarn package manager
 - Git repository
 - Gemini AI API key ([Get one here](https://makersuite.google.com/app/apikey))
 
@@ -52,29 +53,32 @@
 
 1. **Install dependencies:**
    ```bash
-   npm install
+   yarn install
    ```
 
 2. **Build the project:**
    ```bash
-   npm run build
+   yarn build
    # or use: make build
    ```
 
 3. **Link globally (optional):**
    ```bash
-   npm link
+   yarn global add file:.
    ```
 
 ### Development Setup
 
 ```bash
 # Quick setup
+yarn install && yarn build
+
+# Or use Makefile
 make setup
 
 # Development mode
-make dev
-# or: npm run dev
+yarn dev
+# or: make dev
 
 # Using start script
 chmod +x start.sh
@@ -208,23 +212,29 @@ CommitX stores its configuration in:
 CommitX follows industry best practices for commit messages:
 
 ### ✅ **Best Practices Enforced:**
+- **🔠 Capital Letters**: All messages start with capital letters (e.g., "Added", "Fixed", "Updated")
 - **📝 Past Tense**: All messages use past tense (e.g., "Added", "Fixed", "Updated")
 - **🔍 Meaningful Descriptions**: Specific, contextual messages avoiding generic terms
 - **⚛️ Atomic Commits**: Each commit represents a single logical change
+- **🎭 E2E Testing**: Smart detection of Playwright tests, POMs, fixtures, and specs
 - **📏 Proper Length**: First line kept under 72 characters
 
 ### Conventional Commits (Recommended)
 ```
-feat(auth): added OAuth2 integration with Google provider
-fix(api): resolved null pointer exception in user validation
-docs(readme): updated installation instructions for clarity
-refactor(utils): extracted validation logic into separate module
+feat(auth): Added OAuth2 integration with Google provider
+fix(api): Resolved null pointer exception in user validation
+e2e(playwright): Added page object model for login flow
+e2e(spec): Updated E2E test assertions for checkout process
+docs(readme): Updated installation instructions for clarity
+refactor(utils): Extracted validation logic into separate module
 ```
 
 ### Descriptive
 ```
 Added OAuth2 integration for user authentication
 Fixed memory leak in event listener cleanup
+Added E2E test spec for user registration flow
+Updated page object model with new login selectors
 Updated installation instructions with detailed steps
 Refactored user authentication to use JWT tokens
 ```
@@ -233,15 +243,34 @@ Refactored user authentication to use JWT tokens
 ```
 Added OAuth2 support
 Fixed login validation
+Added E2E tests
+Updated page objects
 Updated documentation
 Refactored auth module
 ```
 
 ### ❌ **What CommitX Avoids:**
-- Generic messages like "Updated files" or "Fixed bug"
-- Present tense verbs ("Add", "Fix", "Update")
+- Generic messages like "updated files" or "fixed bug"
+- Present tense verbs ("add", "fix", "update")
+- Lowercase starting letters ("added" instead of "Added")
 - Vague descriptions without context
 - Overly long commit messages
+
+### 🎭 **E2E Testing & Playwright Support:**
+CommitX intelligently detects Playwright patterns and generates appropriate commit messages:
+- **Page Object Models (POMs)**: Files with `.page.` or containing "pageobject"
+- **Test Specs**: Files with `.spec.` or `.test.` in E2E directories
+- **Fixtures**: Test data and setup files containing "fixture" or "setup"
+- **Config Files**: `playwright.config.ts` and test configuration files
+- **Utilities**: Test helpers and common utilities
+
+**Example E2E Commit Messages:**
+```
+e2e(login): Added page object model for login flow
+e2e(checkout): Updated E2E test assertions for payment process
+e2e(fixture): Added test data fixtures for user registration
+e2e(config): Updated Playwright configuration for CI environment
+```
 
 ---
 
@@ -330,22 +359,22 @@ commit-x commit --push
 
 ```bash
 # Install dependencies
-npm install
+yarn install
 
 # Build TypeScript
-npm run build
+yarn build
 
 # Run in development mode
-npm run dev
+yarn dev
 
 # Run tests
-npm test
+yarn test
 
 # Lint code
-npm run lint
+yarn lint
 
 # Format code
-npm run format
+yarn format
 ```
 
 ### Project Structure
