@@ -38,11 +38,6 @@ dev:
 	@echo "🚀 Starting development mode..."
 	yarn dev
 
-# Run tests
-test:
-	@echo "🧪 Running tests..."
-	yarn test
-
 # Run linter
 lint:
 	@echo "🔍 Running ESLint..."
