@@ -64,6 +64,8 @@ program
         options.message = messageValidation.sanitizedValue;
       }
 
+      // Import only when needed to avoid loading heavy dependencies
+      const { CommitX } = await import('./core/commitx.js');
       const commitX = new CommitX();
 
       // Show warning if push is requested in individual mode
@@ -90,6 +92,8 @@ program
   .description('Show repository status and changes')
   .action(async () => {
     return withErrorHandling(async () => {
+      // Import only when needed to avoid loading heavy dependencies
+      const { CommitX } = await import('./core/commitx.js');
       const commitX = new CommitX();
       await commitX.status();
     }, { operation: 'status' });
@@ -102,6 +106,8 @@ program
   .description('Show changes summary')
   .action(async () => {
     return withErrorHandling(async () => {
+      // Import only when needed to avoid loading heavy dependencies
+      const { CommitX } = await import('./core/commitx.js');
       const commitX = new CommitX();
       await commitX.diff();
     }, { operation: 'diff' });
@@ -307,6 +313,8 @@ program
 program
   .action(async () => {
     try {
+      // Import only when needed to avoid loading heavy dependencies
+      const { CommitX } = await import('./core/commitx.js');
       const commitX = new CommitX();
       await commitX.commit(); // Uses individual workflow by default
     } catch (error) {
@@ -327,6 +335,8 @@ if (process.argv.length === 2) {
   // No arguments provided, run default commit
   (async () => {
     try {
+      // Import only when needed to avoid loading heavy dependencies
+      const { CommitX } = await import('./core/commitx.js');
       const commitX = new CommitX();
       await commitX.commit();
     } catch (error) {

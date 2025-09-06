@@ -11,18 +11,27 @@ import { CommitOptions, CommitSuggestion } from '../types/index.js';
 
 export class CommitX {
   private gitService: GitService;
-  private aiService: AIService;
+  private aiService: AIService | null = null;
   private config: ConfigManager;
 
   constructor() {
     this.gitService = new GitService();
     this.config = ConfigManager.getInstance();
+    // AIService will be lazily loaded when needed
+  }
 
-    try {
-      this.aiService = new AIService();
-    } catch (error) {
-      throw new Error(`Failed to initialize AI service: ${error}`);
+  /**
+   * Get AI service instance (lazy loading)
+   */
+  private getAIService(): AIService {
+    if (!this.aiService) {
+      try {
+        this.aiService = new AIService();
+      } catch (error) {
+        throw new Error(`Failed to initialize AI service: ${error}`);
+      }
     }
+    return this.aiService;
   }
 
   /**
@@ -156,7 +165,7 @@ export class CommitX {
       await this.gitService.stageFile(file);
 
       // Generate commit message for this file (silent)
-      const suggestions = await this.aiService.generateCommitMessage([fileDiff]);
+      const suggestions = await this.getAIService().generateCommitMessage([fileDiff]);
 
       // Automatically use the best AI-generated commit message
       const commitMessage = suggestions[0]?.message || `Update ${fileName}`;
@@ -190,7 +199,7 @@ export class CommitX {
 
       spinner.text = 'Generating commit messages...';
 
-      const suggestions = await this.aiService.generateCommitMessage(diffs);
+      const suggestions = await this.getAIService().generateCommitMessage(diffs);
 
       spinner.succeed(`Generated ${suggestions.length} commit message suggestions`);
 
