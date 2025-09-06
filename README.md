@@ -203,28 +203,45 @@ CommitX stores its configuration in:
 
 ---
 
-## 🎨 Commit Message Styles
+## 🎨 Commit Message Styles & Best Practices
+
+CommitX follows industry best practices for commit messages:
+
+### ✅ **Best Practices Enforced:**
+- **📝 Past Tense**: All messages use past tense (e.g., "Added", "Fixed", "Updated")
+- **🔍 Meaningful Descriptions**: Specific, contextual messages avoiding generic terms
+- **⚛️ Atomic Commits**: Each commit represents a single logical change
+- **📏 Proper Length**: First line kept under 72 characters
 
 ### Conventional Commits (Recommended)
 ```
-feat(auth): add OAuth2 integration
-fix(api): resolve null pointer exception
-docs(readme): update installation instructions
+feat(auth): added OAuth2 integration with Google provider
+fix(api): resolved null pointer exception in user validation
+docs(readme): updated installation instructions for clarity
+refactor(utils): extracted validation logic into separate module
 ```
 
 ### Descriptive
 ```
-Add OAuth2 integration for user authentication
-Fix null pointer exception in API handler
-Update installation instructions in README
+Added OAuth2 integration for user authentication
+Fixed memory leak in event listener cleanup
+Updated installation instructions with detailed steps
+Refactored user authentication to use JWT tokens
 ```
 
 ### Minimal
 ```
-Add OAuth2
-Fix API bug
-Update docs
+Added OAuth2 support
+Fixed login validation
+Updated documentation
+Refactored auth module
 ```
+
+### ❌ **What CommitX Avoids:**
+- Generic messages like "Updated files" or "Fixed bug"
+- Present tense verbs ("Add", "Fix", "Update")
+- Vague descriptions without context
+- Overly long commit messages
 
 ---
 
