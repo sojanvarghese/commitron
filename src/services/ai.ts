@@ -1,10 +1,9 @@
 import { GoogleGenerativeAI } from '@google/generative-ai';
-import { CommitSuggestion, CommitConfig, GitDiff, CommitType } from '../types/index.js';
-import { ConfigManager } from '../config/index.js';
+import { CommitSuggestion, CommitConfig, GitDiff, CommitType } from '../types/common.js';
+import { ConfigManager } from '../config.js';
 import {
   analyzeCommitType,
   extractScope,
-  formatConventionalCommit,
   generateDescription,
   validateCommitMessage as validateMessage
 } from '../utils/commit-helpers.js';
@@ -12,16 +11,16 @@ import {
   validateDiffSize,
   validateApiKey,
   withTimeout,
-  DEFAULT_LIMITS,
-  sanitizeError
 } from '../utils/security.js';
+import { ErrorType } from '../types/error-handler.js';
 import {
   ErrorHandler,
-  ErrorType,
   withErrorHandling,
   withRetry,
   SecureError
 } from '../utils/error-handler.js';
+import { DEFAULT_LIMITS } from '../constants/security.js';
+import { AI_RETRY_ATTEMPTS, AI_RETRY_DELAY_MS, AI_DEFAULT_MODEL, AI_MAX_SUGGESTIONS, AI_DIFF_PREVIEW_LENGTH } from '../constants/ai.js';
 
 export class AIService {
   private genAI: GoogleGenerativeAI;
@@ -57,13 +56,10 @@ export class AIService {
     this.genAI = new GoogleGenerativeAI(keyValidation.sanitizedValue!);
   }
 
-  /**
-   * Generate commit message suggestions based on git diffs with security validation
-   */
+
   generateCommitMessage = async (diffs: GitDiff[]): Promise<CommitSuggestion[]> => {
     return withRetry(async () => {
       return withErrorHandling(async () => {
-        // Validate input diffs
         if (!diffs || diffs.length === 0) {
           throw new SecureError(
             'No diffs provided for commit message generation',
@@ -73,7 +69,6 @@ export class AIService {
           );
         }
 
-        // Validate diff sizes
         for (const diff of diffs) {
           const diffValidation = validateDiffSize(diff.changes, DEFAULT_LIMITS.maxDiffSize);
           if (!diffValidation.isValid) {
@@ -87,13 +82,11 @@ export class AIService {
         }
 
         const config = this.config.getConfig();
-        const model = this.genAI.getGenerativeModel({ model: config.model || 'gemini-1.5-flash' });
+        const model = this.genAI.getGenerativeModel({ model: config.model || AI_DEFAULT_MODEL });
 
-        // Enhanced analysis using helper functions
         const analysisContext = this.analyzeChanges(diffs);
         const prompt = this.buildEnhancedPrompt(diffs, config, analysisContext);
 
-        // Validate prompt size
         if (prompt.length > DEFAULT_LIMITS.maxApiRequestSize) {
           throw new SecureError(
             `Prompt size ${prompt.length} exceeds limit of ${DEFAULT_LIMITS.maxApiRequestSize} characters`,
@@ -103,24 +96,18 @@ export class AIService {
           );
         }
 
-        const result = await withTimeout(
+        const { response } = await withTimeout(
           model.generateContent(prompt),
           DEFAULT_LIMITS.timeoutMs
         );
-        const response = await result.response;
         const text = response.text();
-
         const suggestions = this.parseResponse(text, config);
 
-        // Validate and improve suggestions
         return this.validateAndImprove(suggestions, analysisContext);
       }, { operation: 'generateCommitMessage' });
-    }, 3, 2000, { operation: 'generateCommitMessage' });
+    }, AI_RETRY_ATTEMPTS, AI_RETRY_DELAY_MS, { operation: 'generateCommitMessage' });
   }
 
-  /**
-   * Build the prompt for AI based on configuration and changes
-   */
   private buildPrompt = (diffs: GitDiff[], config: CommitConfig): string => {
     let prompt = '';
 
@@ -130,7 +117,6 @@ export class AIService {
       prompt = this.getDefaultPrompt(config);
     }
 
-    // Add changes context
     prompt += '\n\nCode changes to analyze:\n\n';
 
     diffs.forEach((diff, index) => {
@@ -149,10 +135,9 @@ export class AIService {
       prompt += `Changes: +${diff.additions} -${diff.deletions}\n`;
 
       if (config.includeFiles && diff.changes) {
-        // Include first 500 characters of diff to avoid token limits
-        const diffPreview = diff.changes.substring(0, 500);
+        const diffPreview = diff.changes.substring(0, AI_DIFF_PREVIEW_LENGTH);
         prompt += `Diff preview:\n${diffPreview}\n`;
-        if (diff.changes.length > 500) {
+        if (diff.changes.length > AI_DIFF_PREVIEW_LENGTH) {
           prompt += '... (truncated)\n';
         }
       }
@@ -160,7 +145,7 @@ export class AIService {
       prompt += '\n';
     });
 
-    prompt += '\nPlease provide 3 commit message suggestions in JSON format with the following structure:\n';
+    prompt += `\nPlease provide ${AI_MAX_SUGGESTIONS} commit message suggestions in JSON format with the following structure:\n`;
     prompt += '{\n';
     prompt += '  "suggestions": [\n';
     prompt += '    {\n';
@@ -176,13 +161,9 @@ export class AIService {
     return prompt;
   }
 
-  /**
-   * Get default prompt based on configuration
-   */
   private getDefaultPrompt = (config: CommitConfig): string => {
     let prompt = 'You are an expert Git commit message generator. ';
 
-    // Core principles for all commit messages
     prompt += 'IMPORTANT GUIDELINES:\n';
     prompt += '1. ALWAYS start with CAPITAL LETTER (e.g., "Added", "Fixed", "Updated", "Refactored")\n';
     prompt += '2. Use PAST TENSE (e.g., "Added", "Fixed", "Updated", "Refactored")\n';
@@ -233,11 +214,8 @@ export class AIService {
     return prompt;
   }
 
-  /**
-   * Analyze changes to provide context for better commit messages
-   */
   private analyzeChanges = (diffs: GitDiff[]) => {
-    const primaryDiff = diffs[0]; // For individual commits, we have one file
+    const primaryDiff = diffs[0];
 
     return {
       commitType: analyzeCommitType(diffs),
@@ -249,20 +227,15 @@ export class AIService {
     };
   }
 
-  /**
-   * Build enhanced prompt with analysis context
-   */
   private buildEnhancedPrompt = (diffs: GitDiff[], config: CommitConfig, analysis: any): string => {
     let prompt = this.getDefaultPrompt(config);
 
-    // Add analysis context to help AI generate better messages
     prompt += `\n\nChange Analysis Context:\n`;
     prompt += `- Suggested commit type: ${analysis.commitType}\n`;
     prompt += `- File scope: ${analysis.scope || 'general'}\n`;
     prompt += `- Suggested description: ${analysis.description}\n`;
     prompt += `- Total changes: +${analysis.totalAdditions}/-${analysis.totalDeletions}\n`;
 
-    // Add file details
     prompt += '\n\nFile Details:\n';
     diffs.forEach((diff, index) => {
       prompt += `File ${index + 1}: ${diff.file}\n`;
@@ -279,18 +252,13 @@ export class AIService {
     return prompt;
   }
 
-  /**
-   * Validate and improve commit message suggestions
-   */
   private validateAndImprove = (suggestions: CommitSuggestion[], analysis: any): CommitSuggestion[] => {
     return suggestions.map(suggestion => {
       const validation = validateMessage(suggestion.message);
 
       if (!validation.valid) {
-        // Try to improve the message based on validation feedback
         let improvedMessage = suggestion.message;
 
-        // Apply automatic improvements based on analysis
         if (suggestion.message.length > 72) {
           improvedMessage = improvedMessage.substring(0, 69) + '...';
         }
@@ -307,12 +275,8 @@ export class AIService {
     });
   }
 
-  /**
-   * Parse AI response and extract commit suggestions
-   */
   private parseResponse = (response: string, config: CommitConfig): CommitSuggestion[] => {
     try {
-      // Try to extract JSON from the response
       const jsonMatch = response.match(/\{[\s\S]*\}/);
       if (!jsonMatch) {
         throw new Error('No JSON found in response');
@@ -333,13 +297,9 @@ export class AIService {
       console.warn('Failed to parse JSON response, falling back to text parsing');
     }
 
-    // Fallback: try to extract messages from text
     return this.parseTextResponse(response, config);
   }
 
-  /**
-   * Fallback parser for text responses
-   */
   private parseTextResponse = (response: string, config: CommitConfig): CommitSuggestion[] => {
     const lines = response.split('\n').filter(line => line.trim());
     const suggestions: CommitSuggestion[] = [];
@@ -356,7 +316,6 @@ export class AIService {
       }
     }
 
-    // If we still don't have suggestions, create a generic one
     if (suggestions.length === 0) {
       suggestions.push({
         message: 'Update files',
@@ -365,12 +324,9 @@ export class AIService {
       });
     }
 
-    return suggestions.slice(0, 3); // Limit to 3 suggestions
+    return suggestions.slice(0, AI_MAX_SUGGESTIONS);
   }
 
-  /**
-   * Validate commit message format
-   */
   validateCommitMessage = (message: string, style: string): { valid: boolean; errors: string[] } => {
     const errors: string[] = [];
 
