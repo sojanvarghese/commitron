@@ -1,4 +1,4 @@
-import simpleGit, { SimpleGit, DiffResult } from 'simple-git';
+import simpleGit, { SimpleGit } from 'simple-git';
 import { GitDiff, GitStatus } from '../types/common.js';
 import {
   validateAndSanitizePath,
@@ -160,8 +160,8 @@ export class GitService {
           isRenamed: status.renamed.some((r: any) => r.to === file),
           oldPath: status.renamed.find((r: any) => r.to === file)?.from
         };
-      } catch (error) {
-        return {
+        } catch {
+          return {
           file: validatedFile,
           additions: 0,
           deletions: 0,
@@ -176,7 +176,7 @@ export class GitService {
   }
 
 
-  async getStagedDiff(): Promise<GitDiff[]> {
+  getStagedDiff = async (): Promise<GitDiff[]> => {
     return withErrorHandling(async () => {
       const status = await withTimeout(
         this.git.status(),
@@ -233,7 +233,7 @@ export class GitService {
     }, { operation: 'getStagedDiff' });
   }
 
-  async getChangesSummary(): Promise<string> {
+  getChangesSummary = async (): Promise<string> => {
     const diffs = await this.getStagedDiff();
 
     if (diffs.length === 0) {
@@ -263,7 +263,7 @@ export class GitService {
     return summary;
   }
 
-  async stageAll(): Promise<void> {
+  stageAll = async (): Promise<void> => {
     return withErrorHandling(async () => {
       await withTimeout(
         this.git.add('.'),
@@ -272,7 +272,7 @@ export class GitService {
     }, { operation: 'stageAll' });
   }
 
-  async stageFiles(files: string[]): Promise<void> {
+  stageFiles = async (files: string[]): Promise<void> => {
     return withErrorHandling(async () => {
       const validatedFiles = this.validateFilePaths(files);
       if (validatedFiles.length === 0) {
@@ -290,7 +290,7 @@ export class GitService {
     }, { operation: 'stageFiles' });
   }
 
-  async stageFile(file: string): Promise<void> {
+  stageFile = async (file: string): Promise<void> => {
     return withErrorHandling(async () => {
       const pathValidation = validateAndSanitizePath(file, this.repositoryPath);
       if (!pathValidation.isValid) {
@@ -308,7 +308,7 @@ export class GitService {
     }, { operation: 'stageFile', file });
   }
 
-  async commit(message: string): Promise<void> {
+  commit = async (message: string): Promise<void> => {
     return withErrorHandling(async () => {
       const messageValidation = validateCommitMessage(message);
       if (!messageValidation.isValid) {
@@ -327,7 +327,7 @@ export class GitService {
     }, { operation: 'commit' });
   }
 
-  async push(): Promise<void> {
+  push = async (): Promise<void> => {
     return withRetry(async () => {
       return withErrorHandling(async () => {
         const status = await withTimeout(
@@ -344,7 +344,7 @@ export class GitService {
     }, GIT_RETRY_ATTEMPTS, GIT_RETRY_DELAY_MS, { operation: 'push' });
   }
 
-  async getLastCommitMessage(): Promise<string | null> {
+  getLastCommitMessage = async (): Promise<string | null> => {
     try {
       const log = await this.git.log({ maxCount: 1 });
       return log.latest?.message || null;
@@ -353,7 +353,7 @@ export class GitService {
     }
   }
 
-  async getRepoInfo(): Promise<{ name: string; branch: string }> {
+  getRepoInfo = async (): Promise<{ name: string; branch: string }> => {
     const status = await this.git.status();
     const remotes = await this.git.getRemotes(true);
 
