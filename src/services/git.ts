@@ -112,8 +112,13 @@ export class GitService {
         GIT_TIMEOUT_MS
       );
 
+      // Convert absolute path to relative path for comparison with git status
+      const relativeFile = file.startsWith(this.repositoryPath)
+        ? file.substring(this.repositoryPath.length + 1)
+        : file;
+
       try {
-        const isDeleted = status.deleted.includes(file);
+        const isDeleted = status.deleted.includes(relativeFile);
 
         if (isDeleted && !staged) {
           return {
@@ -155,10 +160,10 @@ export class GitService {
           additions: fileSummary?.insertions || 0,
           deletions: fileSummary?.deletions || 0,
           changes: diffValidation.sanitizedValue!,
-          isNew: status.created.includes(file) || status.not_added.includes(file),
-          isDeleted: status.deleted.includes(file),
-          isRenamed: status.renamed.some((r: any) => r.to === file),
-          oldPath: status.renamed.find((r: any) => r.to === file)?.from
+          isNew: status.created.includes(relativeFile) || status.not_added.includes(relativeFile),
+          isDeleted: status.deleted.includes(relativeFile),
+          isRenamed: status.renamed.some((r: any) => r.to === relativeFile),
+          oldPath: status.renamed.find((r: any) => r.to === relativeFile)?.from
         };
         } catch {
           return {
@@ -166,10 +171,10 @@ export class GitService {
           additions: 0,
           deletions: 0,
           changes: '',
-          isNew: status.created.includes(file) || status.not_added.includes(file),
-          isDeleted: status.deleted.includes(file),
-          isRenamed: status.renamed.some((r: any) => r.to === file),
-          oldPath: status.renamed.find((r: any) => r.to === file)?.from
+          isNew: status.created.includes(relativeFile) || status.not_added.includes(relativeFile),
+          isDeleted: status.deleted.includes(relativeFile),
+          isRenamed: status.renamed.some((r: any) => r.to === relativeFile),
+          oldPath: status.renamed.find((r: any) => r.to === relativeFile)?.from
         };
       }
     }, { operation: 'getFileDiff', file });
