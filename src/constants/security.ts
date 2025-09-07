@@ -8,7 +8,7 @@ export const DEFAULT_LIMITS: ResourceLimits = {
 };
 
 export const ALLOWED_CONFIG_KEYS = [
-    'apiKey', 'model', 'style'
+    'apiKey', 'model'
   ];
 
 export const ALLOWED_MODELS = [
@@ -22,11 +22,6 @@ export const ALLOWED_MODELS = [
   'gemini-2.5-flash-lite'
 ];
 
-export const ALLOWED_STYLES = [
-  'conventional',
-  'descriptive',
-  'minimal'
-];
 
 export const ALLOWED_AUTO_COMMIT = [
   'true',
