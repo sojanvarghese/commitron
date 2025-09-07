@@ -22,12 +22,11 @@
     "commit:all": "yarn cx commit --all",
     "status": "yarn cx status",
     "diff": "yarn cx diff",
-    "cx:config": "yarn cx config get",
-    "cx:config:get": "yarn cx config get",
-    "cx:config:set": "yarn cx config set",
-    "cx:config:reset": "yarn cx config reset",
-    "cx:setup": "yarn cx setup",
-    "cx:help": "yarn cx help-examples"
+    "config": "yarn cx config get",
+    "config:set": "yarn cx config set",
+    "config:reset": "yarn cx config reset",
+    "setup": "yarn cx setup",
+    "help": "yarn cx help-examples"
   },
   "packageManager": "yarn@4.9.2",
   "keywords": [
