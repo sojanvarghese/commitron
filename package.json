@@ -11,10 +11,21 @@
   "scripts": {
     "build": "tsc",
     "dev": "ts-node src/cli.ts",
-    "start": "node dist/cli.js",
+    "cx": "node dist/cli.js",
     "lint": "eslint src/**/*.ts",
     "format": "prettier --write src/**/*.ts",
-    "clean": "rm -rf node_modules yarn.lock"
+    "clean": "rm -rf node_modules yarn.lock",
+    "commit": "yarn cx commit",
+    "commit:dry": "yarn cx commit --dry-run",
+    "commit:all": "yarn cx commit --all",
+    "status": "yarn cx status",
+    "diff": "yarn cx diff",
+    "cx:config": "yarn cx config get",
+    "cx:config:get": "yarn cx config get",
+    "cx:config:set": "yarn cx config set",
+    "cx:config:reset": "yarn cx config reset",
+    "cx:setup": "yarn cx setup",
+    "cx:help": "yarn cx help-examples"
   },
   "packageManager": "yarn@4.9.2",
   "keywords": [
