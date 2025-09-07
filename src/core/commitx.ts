@@ -60,6 +60,11 @@ export class CommitX {
         console.log(chalk.green(`\n✅ Successfully processed ${processedCount} of ${unstagedFiles.length} files`));
       }
 
+      // Force exit to prevent delay from lingering HTTP connections
+      if (options.dryRun || processedCount > 0) {
+        setTimeout(() => process.exit(0), 100);
+      }
+
     } catch (error) {
       console.error(chalk.red(`Error: ${error}`));
       process.exit(1);
@@ -115,6 +120,9 @@ export class CommitX {
         pushSpinner.fail(`Failed to push: ${error}`);
       }
     }
+
+    // Force exit to prevent delay from lingering HTTP connections
+    setTimeout(() => process.exit(0), 100);
   }
 
 
@@ -318,8 +326,12 @@ export class CommitX {
         console.log(chalk.gray(`\n💬 Last commit: "${lastCommit}"`));
       }
 
+      // Force exit to prevent delay
+      setTimeout(() => process.exit(0), 100);
+
     } catch (error) {
       console.error(chalk.red(`Error: ${error}`));
+      process.exit(1);
     }
   }
 
@@ -327,6 +339,7 @@ export class CommitX {
     try {
       if (!(await this.gitService.isGitRepository())) {
         console.log(chalk.red('Not a git repository'));
+        setTimeout(() => process.exit(1), 100);
         return;
       }
 
@@ -335,8 +348,12 @@ export class CommitX {
       console.log();
       console.log(summary);
 
+      // Force exit to prevent delay
+      setTimeout(() => process.exit(0), 100);
+
     } catch (error) {
       console.error(chalk.red(`Error: ${error}`));
+      process.exit(1);
     }
   }
 }
