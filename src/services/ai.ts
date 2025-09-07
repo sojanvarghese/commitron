@@ -189,23 +189,22 @@ export class AIService {
     return suggestions.map(suggestion => {
       let improvedMessage = suggestion.message.trim();
 
-      // Validate word count (7-15 words) - reject messages that are too short/long
+      // Validate word count (7-21 words) - reject messages that are too short/long
       const wordCount = improvedMessage.split(/\s+/).length;
       let confidence = suggestion.confidence || 0.8;
 
       if (wordCount < 7) {
         // Don't add filler words - mark as low confidence instead
         confidence = Math.max(0.3, confidence - 0.4);
-      } else if (wordCount > 15) {
-        // Truncate to exactly 15 words without adding filler
+      } else if (wordCount > 21) {
+        // Truncate to exactly 21 words without adding filler
         const words = improvedMessage.split(/\s+/);
-        improvedMessage = words.slice(0, 15).join(' ');
+        improvedMessage = words.slice(0, 21).join(' ');
         confidence = Math.max(0.6, confidence - 0.1);
       }
 
-      // Ensure proper length
-      if (improvedMessage.length > 96) {
-        improvedMessage = improvedMessage.substring(0, 93) + '...';
+      if (improvedMessage.length > 53) {
+        improvedMessage = improvedMessage.substring(0, 53) + '...';
       }
 
       return {
