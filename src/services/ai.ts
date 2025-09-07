@@ -196,15 +196,15 @@ export class AIService {
       if (wordCount < 7) {
         // Don't add filler words - mark as low confidence instead
         confidence = Math.max(0.3, confidence - 0.4);
-      } else if (wordCount > 21) {
+      } else if (wordCount > 25) {
         // Truncate to exactly 21 words without adding filler
         const words = improvedMessage.split(/\s+/);
-        improvedMessage = words.slice(0, 21).join(' ');
+        improvedMessage = words.slice(0, 25).join(' ');
         confidence = Math.max(0.6, confidence - 0.1);
       }
 
-      if (improvedMessage.length > 53) {
-        improvedMessage = improvedMessage.substring(0, 53) + '...';
+      if (improvedMessage.length > 96) {
+        improvedMessage = improvedMessage.substring(0, 96) + '...';
       }
 
       return {
