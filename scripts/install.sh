@@ -56,7 +56,7 @@ if [[ $REPLY =~ ^[Yy]$ ]]; then
     echo "✅ CommitX linked globally with Yarn"
     echo "   You can now use: commit-x or cx"
 else
-    echo "ℹ️  To use CommitX, run: yarn start or node dist/cli.js"
+    echo "ℹ️  To use CommitX, run: yarn cx or node dist/cli.js"
 fi
 
 # Check for API key
@@ -75,7 +75,7 @@ else
     else
         echo "   You can set your API key later with:"
         echo "   export GEMINI_API_KEY=your_api_key"
-        echo "   or run: commit-x setup"
+        echo "   or run: yarn setup"
     fi
 fi
 
@@ -84,14 +84,14 @@ echo "🎉 Installation complete!"
 echo ""
 echo "Next steps:"
 echo "1. Get your Gemini API key: https://makersuite.google.com/app/apikey"
-echo "2. Run: commit-x setup (for interactive configuration)"
+echo "2. Run: yarn setup (for interactive configuration)"
 echo "3. Navigate to a git repository"
-echo "4. Run: commit-x (to start making AI-powered commits)"
+echo "4. Run: yarn commit (to start making AI-powered commits)"
 echo ""
 echo "Examples:"
-echo "  commit-x                    # Process files individually"
-echo "  commit-x commit --all       # Traditional workflow"
-echo "  commit-x status             # Show repository status"
-echo "  commit-x help-examples      # Show more examples"
+echo "  yarn commit                 # Process files individually"
+echo "  yarn commit:all             # Traditional workflow"
+echo "  yarn status                 # Show repository status"
+echo "  yarn help                   # Show more examples"
 echo ""
 echo "Happy committing! 🚀"
