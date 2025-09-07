@@ -31,7 +31,7 @@ yarn global add file:.
 
 1. **Setup**:
    ```bash
-   yarn cx:setup
+   yarn setup
    ```
 
 2. **Commit changes**:
@@ -48,19 +48,22 @@ yarn commit:all              # Stage all files and commit together
 yarn commit:dry              # Preview commits without executing
 yarn status                  # Show repository status
 yarn diff                    # Show changes summary
-yarn cx:config               # View configuration
-yarn cx:setup                # Interactive setup
-yarn cx:help                 # Show usage examples
+yarn config                  # View configuration
+yarn config:set              # Set configuration values
+yarn config:reset            # Reset configuration to defaults
+yarn setup                   # Interactive setup
+yarn help                    # Show usage examples
+yarn cx                      # Direct CLI access
 ```
 
 ### Configuration
 ```bash
 # Set configuration values
-yarn cx:config:set style conventional
-yarn cx:config:set model gemini-1.5-flash
+yarn config:set style conventional
+yarn config:set model gemini-1.5-flash
 
 # View configuration
-yarn cx:config
+yarn config
 ```
 
 ### Yarn Scripts
@@ -73,11 +76,11 @@ All commands are available as convenient yarn scripts:
 | `yarn commit:dry` | Preview commits without executing |
 | `yarn status` | Show repository status |
 | `yarn diff` | Show changes summary |
-| `yarn cx:config` | View configuration |
-| `yarn cx:config:set` | Set configuration values |
-| `yarn cx:config:reset` | Reset to defaults |
-| `yarn cx:setup` | Interactive setup |
-| `yarn cx:help` | Show usage examples |
+| `yarn config` | View configuration |
+| `yarn config:set` | Set configuration values |
+| `yarn config:reset` | Reset to defaults |
+| `yarn setup` | Interactive setup |
+| `yarn help` | Show usage examples |
 | `yarn cx` | Direct CLI access |
 
 ## Configuration Options
