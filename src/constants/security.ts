@@ -8,8 +8,7 @@ export const DEFAULT_LIMITS: ResourceLimits = {
 };
 
 export const ALLOWED_CONFIG_KEYS = [
-    'apiKey', 'model', 'style', 'maxLength', 'includeFiles',
-    'autoCommit', 'autoPush', 'customPrompt'
+    'apiKey', 'model', 'style'
   ];
 
 export const ALLOWED_MODELS = [

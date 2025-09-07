@@ -14,7 +14,7 @@ import {
   withRetry,
   SecureError
 } from '../utils/error-handler.js';
-import { GIT_TIMEOUT_MS, GIT_RETRY_ATTEMPTS, GIT_RETRY_DELAY_MS, GIT_DEFAULT_BRANCH } from '../constants/git.js';
+import { GIT_TIMEOUT_MS, GIT_RETRY_ATTEMPTS, GIT_RETRY_DELAY_MS } from '../constants/git.js';
 
 export class GitService {
   private git: SimpleGit;
@@ -50,7 +50,7 @@ export class GitService {
         this.git.status(),
         GIT_TIMEOUT_MS
       );
-  
+
       const staged = this.validateFilePaths(status.staged);
       const unstaged = this.validateFilePaths(status.modified);
       const untracked = this.validateFilePaths(status.not_added);
@@ -334,7 +334,7 @@ export class GitService {
           this.git.status(),
           GIT_TIMEOUT_MS
         );
-        const branch = status.current || GIT_DEFAULT_BRANCH;
+        const branch = status.current;
 
         await withTimeout(
           this.git.push('origin', branch),
@@ -370,7 +370,7 @@ export class GitService {
 
     return {
       name: repoName,
-      branch: status.current || GIT_DEFAULT_BRANCH
+      branch: status.current
     };
   }
 }

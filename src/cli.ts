@@ -230,30 +230,6 @@ program
             { name: 'Minimal (Add auth)', value: 'minimal' }
           ],
           default: 'conventional'
-        },
-        {
-          type: 'number',
-          name: 'maxLength',
-          message: 'Maximum commit message length:',
-          default: 72,
-          validate: (input: number) => {
-            if (input < 20 || input > 100) {
-              return 'Length should be between 20 and 100 characters';
-            }
-            return true;
-          }
-        },
-        {
-          type: 'confirm',
-          name: 'includeFiles',
-          message: 'Include file diffs in AI analysis?',
-          default: true
-        },
-        {
-          type: 'confirm',
-          name: 'autoPush',
-          message: 'Automatically push after committing?',
-          default: false
         }
       ]);
 

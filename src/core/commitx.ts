@@ -4,17 +4,14 @@ import inquirer from 'inquirer';
 import process from 'process';
 import { GitService } from '../services/git.js';
 import { AIService } from '../services/ai.js';
-import { ConfigManager } from '../config.js';
 import { CommitOptions, CommitSuggestion } from '../types/common.js';
 
 export class CommitX {
   private gitService: GitService;
   private aiService: AIService | null = null;
-  private config: ConfigManager;
 
   constructor() {
     this.gitService = new GitService();
-    this.config = ConfigManager.getInstance();
   }
 
   private getAIService(): AIService {
@@ -90,13 +87,9 @@ export class CommitX {
       }
     }
 
-    let commitMessage: string;
-
-    if (options.message) {
-      commitMessage = options.message;
-    } else {
-      commitMessage = await this.generateCommitMessage(options.interactive);
-    }
+    const commitMessage: string = options.message
+      ? options.message
+      : await this.generateCommitMessage(options.interactive);
 
     if (!commitMessage) {
       console.log(chalk.yellow('No commit message provided. Aborting commit.'));
@@ -215,35 +208,33 @@ export class CommitX {
       }
     ]);
 
-    if (selected === 'cancel') {
-      return '';
-    }
+    switch (selected) {
+      case 'cancel':
+      case 'skip':
+        return '';
 
-    if (selected === 'skip') {
-      return '';
-    }
-
-    if (selected === 'custom') {
-      const { customMessage } = await inquirer.prompt([
-        {
-          type: 'input',
-          name: 'customMessage',
-          message: `Enter commit message${file ? ` for ${chalk.cyan(file)}` : ''}:`,
-          validate: (input: string) => {
-            if (!input.trim()) {
-              return 'Commit message cannot be empty';
+      case 'custom':
+        const { customMessage } = await inquirer.prompt([
+          {
+            type: 'input',
+            name: 'customMessage',
+            message: `Enter commit message${file ? ` for ${chalk.cyan(file)}` : ''}:`,
+            validate: (input: string) => {
+              if (!input.trim()) {
+                return 'Commit message cannot be empty';
+              }
+              if (input.length > 72) {
+                return 'First line should be 72 characters or less';
+              }
+              return true;
             }
-            if (input.length > 72) {
-              return 'First line should be 72 characters or less';
-            }
-            return true;
           }
-        }
-      ]);
-      return customMessage;
-    }
+        ]);
+        return customMessage;
 
-    return selected;
+      default:
+        return selected;
+    }
   }
 
 
@@ -305,11 +296,9 @@ export class CommitX {
         console.log();
       }
 
-      if (status.total === 0) {
-        console.log(chalk.green('✨ Working directory is clean'));
-      } else {
-        console.log(chalk.blue(`📊 Total changes: ${status.total}`));
-      }
+      console.log(status.total === 0
+        ? chalk.green('✨ Working directory is clean')
+        : chalk.blue(`📊 Total changes: ${status.total}`));
 
       // Show last commit
       const lastCommit = await this.gitService.getLastCommitMessage();

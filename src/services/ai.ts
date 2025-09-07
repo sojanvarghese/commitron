@@ -109,32 +109,22 @@ export class AIService {
   }
 
   private buildPrompt = (diffs: GitDiff[], config: CommitConfig): string => {
-    let prompt = '';
-
-    if (config.customPrompt) {
-      prompt = config.customPrompt + '\n\n';
-    } else {
-      prompt = this.getDefaultPrompt(config);
-    }
-
+    let prompt = this.getDefaultPrompt(config);
     prompt += '\n\nCode changes to analyze:\n\n';
 
     diffs.forEach((diff, index) => {
       prompt += `File ${index + 1}: ${diff.file}\n`;
 
-      if (diff.isNew) {
-        prompt += 'Status: New file\n';
-      } else if (diff.isDeleted) {
-        prompt += 'Status: Deleted file\n';
-      } else if (diff.isRenamed) {
-        prompt += `Status: Renamed from ${diff.oldPath}\n`;
-      } else {
-        prompt += 'Status: Modified\n';
-      }
+      let status = 'Modified';
+      if (diff.isNew) status = 'New file';
+      else if (diff.isDeleted) status = 'Deleted file';
+      else if (diff.isRenamed) status = `Renamed from ${diff.oldPath}`;
+
+      prompt += `Status: ${status}\n`;
 
       prompt += `Changes: +${diff.additions} -${diff.deletions}\n`;
 
-      if (config.includeFiles && diff.changes) {
+      if (diff.changes) {
         const diffPreview = diff.changes.substring(0, AI_DIFF_PREVIEW_LENGTH);
         prompt += `Diff preview:\n${diffPreview}\n`;
         if (diff.changes.length > AI_DIFF_PREVIEW_LENGTH) {
@@ -161,6 +151,19 @@ export class AIService {
     return prompt;
   }
 
+  private getMaxLengthForStyle = (style: 'conventional' | 'descriptive' | 'minimal'): number => {
+    switch (style) {
+      case 'conventional':
+        return 72; // Standard for conventional commits with type(scope): format
+      case 'descriptive':
+        return 96; // Longer for detailed descriptions
+      case 'minimal':
+        return 50; // Shorter for concise messages
+      default:
+        return 72;
+    }
+  }
+
   private getDefaultPrompt = (config: CommitConfig): string => {
     let prompt = 'You are an expert Git commit message generator. ';
 
@@ -185,14 +188,17 @@ export class AIService {
         break;
 
       case 'descriptive':
-        prompt += 'Generate descriptive commit messages in past tense with capital letters:\n';
-        prompt += '- Clearly explain what was changed and why\n';
+        prompt += 'Generate highly descriptive commit messages in past tense with capital letters:\n';
+        prompt += '- Clearly explain WHAT was changed, WHY it was changed, and HOW it impacts the system\n';
+        prompt += '- Be specific about the functionality, methods, or business logic involved\n';
+        prompt += '- Include context about the problem being solved or feature being added\n';
         prompt += '- Examples:\n';
-        prompt += '  * "Added comprehensive error handling for API requests"\n';
-        prompt += '  * "Refactored user authentication to use JWT tokens"\n';
-        prompt += '  * "Added E2E test spec for user registration flow"\n';
-        prompt += '  * "Updated page object model with new login selectors"\n';
-        prompt += '  * "Fixed memory leak in event listener cleanup"\n';
+        prompt += '  * "Implemented comprehensive error handling with retry logic for API requests to prevent timeout failures"\n';
+        prompt += '  * "Refactored user authentication system to use JWT tokens instead of session cookies for better scalability"\n';
+        prompt += '  * "Added E2E test spec for complete user registration flow including email verification"\n';
+        prompt += '  * "Updated page object model with new CSS selectors after login UI redesign"\n';
+        prompt += '  * "Fixed memory leak in WebSocket event listener cleanup that caused browser crashes"\n';
+        prompt += '  * "Enhanced form validation to include real-time feedback and accessibility improvements"\n';
         break;
 
       case 'minimal':
@@ -207,7 +213,8 @@ export class AIService {
         break;
     }
 
-    prompt += `\nKeep first line under ${config.maxLength || 72} characters. `;
+    const maxLength = this.getMaxLengthForStyle(config.style || 'conventional');
+    prompt += `\nKeep first line under ${maxLength} characters. `;
     prompt += 'Avoid vague terms like "updated", "changed", "modified" without context. ';
     prompt += 'Be specific about the actual functionality or improvement implemented. ';
 

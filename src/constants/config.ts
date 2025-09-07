@@ -1,9 +1,5 @@
 import { CommitConfig } from '../types/common.js';
 
-/**
- * Configuration-related constants
- */
-
 export const CONFIG_DIR = '.commit-x';
 export const CONFIG_FILE = 'config.json';
 export const CONFIG_FILE_MODE = 0o600;
@@ -11,10 +7,5 @@ export const CONFIG_DIR_MODE = 0o700;
 
 export const DEFAULT_CONFIG: CommitConfig = {
   model: 'gemini-1.5-flash',
-  style: 'conventional',
-  maxLength: 72,
-  includeFiles: true,
-  autoCommit: false,
-  autoPush: false,
-  customPrompt: ''
+  style: 'conventional'
 };

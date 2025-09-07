@@ -3,7 +3,6 @@ import * as fs from 'fs';
 import { promisify } from 'util';
 import { ValidationResult } from '../types/security.js';
 import { ALLOWED_CONFIG_KEYS, ALLOWED_MODELS, ALLOWED_STYLES, DEFAULT_LIMITS, SUSPICIOUS_COMMIT_PATTERNS, SUSPICIOUS_PATTERNS } from '../constants/security.js';
-import { AI_CUSTOM_PROMPT_MAX_LENGTH } from '../constants/ai.js';
 
 const stat = promisify(fs.stat);
 const access = promisify(fs.access);
@@ -118,44 +117,7 @@ export const validateConfigValue = (key: string, value: any): ValidationResult =
       }
       return { isValid: true, sanitizedValue: value };
 
-    case 'maxLength':
-      const numValue = Number(value);
-      if (isNaN(numValue) || numValue < 20 || numValue > 200) {
-        return {
-          isValid: false,
-          error: 'Max length must be a number between 20 and 200'
-        };
-      }
-      return { isValid: true, sanitizedValue: numValue.toString() };
 
-    case 'includeFiles':
-    case 'autoCommit':
-    case 'autoPush':
-      if (typeof value !== 'boolean' && value !== 'true' && value !== 'false') {
-        return {
-          isValid: false,
-          error: `${key} must be a boolean value (true/false)`
-        };
-      }
-      return {
-        isValid: true,
-        sanitizedValue: (value === 'true' || value === true).toString()
-      };
-
-    case 'customPrompt':
-      if (typeof value !== 'string') {
-        return {
-          isValid: false,
-          error: 'Custom prompt must be a string'
-        };
-      }
-      if (value.length > AI_CUSTOM_PROMPT_MAX_LENGTH) {
-        return {
-          isValid: false,
-          error: `Custom prompt must be ${AI_CUSTOM_PROMPT_MAX_LENGTH} characters or less`
-        };
-      }
-      return { isValid: true, sanitizedValue: value.trim() };
 
     default:
       return {

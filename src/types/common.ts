@@ -2,11 +2,6 @@ export interface CommitConfig {
   apiKey?: string;
   model?: string;
   style?: 'conventional' | 'descriptive' | 'minimal';
-  maxLength?: number;
-  includeFiles?: boolean;
-  customPrompt?: string;
-  autoCommit?: boolean;
-  autoPush?: boolean;
 }
 
 export interface GitDiff {
