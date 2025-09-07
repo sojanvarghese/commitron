@@ -253,27 +253,27 @@ program
     console.log(chalk.blue('📚 CommitX Usage Examples:\n'));
 
     console.log(chalk.yellow('Basic usage (Individual commits):'));
-    console.log('  commit-x commit                 # Process files individually');
-    console.log('  cx c                            # Short alias');
-    console.log('  commit-x commit --dry-run       # Preview individual commits');
+    console.log('  yarn commit                     # Process files individually');
+    console.log('  yarn commit:dry                 # Preview individual commits');
+    console.log('  yarn cx                         # Direct CLI access');
     console.log('');
 
     console.log(chalk.yellow('Traditional workflow:'));
-    console.log('  commit-x commit --all           # Stage all files and commit together');
-    console.log('  commit-x commit --all --push    # Stage all, commit, and push');
-    console.log('  commit-x commit -m "fix: bug"   # Use custom message (traditional)');
+    console.log('  yarn commit:all                 # Stage all files and commit together');
+    console.log('  yarn commit:all --push          # Stage all, commit, and push');
+    console.log('  yarn cx commit -m "fix: bug"    # Use custom message (traditional)');
     console.log('');
 
     console.log(chalk.yellow('Status and information:'));
-    console.log('  commit-x status                 # Show repository status');
-    console.log('  commit-x diff                   # Show changes summary');
+    console.log('  yarn status                     # Show repository status');
+    console.log('  yarn diff                       # Show changes summary');
     console.log('');
 
     console.log(chalk.yellow('Configuration:'));
-    console.log('  commit-x setup                  # Interactive setup');
-    console.log('  commit-x config set style conventional');
-    console.log('  commit-x config get apiKey');
-    console.log('  commit-x config reset');
+    console.log('  yarn cx:setup                  # Interactive setup');
+    console.log('  yarn cx:config:set style conventional');
+    console.log('  yarn cx:config                 # View configuration');
+    console.log('  yarn cx:config:reset           # Reset configuration');
   });
 
 // Default action for commit when no subcommand is provided
