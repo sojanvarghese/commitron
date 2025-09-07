@@ -219,17 +219,6 @@ program
             }
             return true;
           }
-        },
-        {
-          type: 'list',
-          name: 'style',
-          message: 'Choose your preferred commit message style:',
-          choices: [
-            { name: 'Conventional Commits (feat: add new feature)', value: 'conventional' },
-            { name: 'Descriptive (Add user authentication system)', value: 'descriptive' },
-            { name: 'Minimal (Add auth)', value: 'minimal' }
-          ],
-          default: 'conventional'
         }
       ]);
 
@@ -271,7 +260,6 @@ program
 
     console.log(chalk.yellow('Configuration:'));
     console.log('  yarn cx:setup                  # Interactive setup');
-    console.log('  yarn cx:config:set style conventional');
     console.log('  yarn cx:config                 # View configuration');
     console.log('  yarn cx:config:reset           # Reset configuration');
   });
