@@ -1,7 +1,6 @@
 export interface CommitConfig {
   apiKey?: string;
   model?: string;
-  style?: 'conventional' | 'descriptive' | 'minimal';
 }
 
 export interface GitDiff {
@@ -38,20 +37,6 @@ export interface CommitOptions {
   all?: boolean; // Stage all files and commit together (traditional workflow)
 }
 
-export enum CommitType {
-  FEAT = 'feat',
-  FIX = 'fix',
-  DOCS = 'docs',
-  STYLE = 'style',
-  REFACTOR = 'refactor',
-  PERF = 'perf',
-  TEST = 'test',
-  E2E = 'e2e',
-  BUILD = 'build',
-  CI = 'ci',
-  CHORE = 'chore',
-  REVERT = 'revert'
-}
 
 export interface PlaywrightPatterns {
   isPOM: boolean;
