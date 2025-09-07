@@ -2,7 +2,7 @@ import * as path from 'path';
 import * as fs from 'fs';
 import { promisify } from 'util';
 import { ValidationResult } from '../types/security.js';
-import { ALLOWED_CONFIG_KEYS, ALLOWED_MODELS, ALLOWED_STYLES, DEFAULT_LIMITS, SUSPICIOUS_COMMIT_PATTERNS, SUSPICIOUS_PATTERNS } from '../constants/security.js';
+import { ALLOWED_CONFIG_KEYS, ALLOWED_MODELS, DEFAULT_LIMITS, SUSPICIOUS_COMMIT_PATTERNS, SUSPICIOUS_PATTERNS } from '../constants/security.js';
 
 const stat = promisify(fs.stat);
 const access = promisify(fs.access);
@@ -107,16 +107,6 @@ export const validateConfigValue = (key: string, value: any): ValidationResult =
         };
       }
       return { isValid: true, sanitizedValue: value };
-
-    case 'style':
-      if (!ALLOWED_STYLES.includes(value)) {
-        return {
-          isValid: false,
-          error: `Invalid style: ${value}. Allowed styles: ${ALLOWED_STYLES.join(', ')}`
-        };
-      }
-      return { isValid: true, sanitizedValue: value };
-
 
 
     default:
