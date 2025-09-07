@@ -54,4 +54,4 @@ setup: install build
 	@echo ""
 	@echo "Next steps:"
 	@echo "1. Set your API key: export GEMINI_API_KEY=your_key"
-	@echo "2. Run: yarn start or node dist/cli.js"
+	@echo "2. Run: yarn setup to configure or yarn commit to start"
