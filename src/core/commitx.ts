@@ -4,7 +4,8 @@ import inquirer from 'inquirer';
 import process from 'process';
 import { GitService } from '../services/git.js';
 import { AIService } from '../services/ai.js';
-import { CommitOptions, CommitSuggestion } from '../types/common.js';
+import { CommitOptions, CommitSuggestion, GitDiff } from '../types/common.js';
+import { ConfigManager } from '../config.js';
 
 export class CommitX {
   private gitService: GitService;
@@ -26,7 +27,7 @@ export class CommitX {
   }
 
 
-  async commit(options: CommitOptions = {}): Promise<void> {
+  commit = async (options: CommitOptions = {}): Promise<void> => {
     try {
       if (!(await this.gitService.isGitRepository())) {
         throw new Error('Not a git repository. Please run this command from within a git repository.');
@@ -72,7 +73,7 @@ export class CommitX {
   }
 
 
-  private async commitTraditional(options: CommitOptions): Promise<void> {
+  private commitTraditional = async (options: CommitOptions): Promise<void> => {
     const status = await this.gitService.getStatus();
 
     if (status.staged.length === 0) {
@@ -132,6 +133,17 @@ export class CommitX {
       console.log(chalk.cyan(`Processing: ${fileName}`));
 
       const fileDiff = await this.gitService.getFileDiff(file, false);
+      const totalChanges = fileDiff.additions + fileDiff.deletions;
+
+      // Skip truly empty files (no changes and no content) - but NOT deleted files
+      if (totalChanges === 0 && (!fileDiff.changes || fileDiff.changes.trim() === '') && !fileDiff.isDeleted) {
+        if (fileDiff.isNew) {
+          console.log(chalk.yellow(`  Skipping empty new file: ${fileName}`));
+        } else {
+          console.log(chalk.yellow(`  Skipping file with no changes: ${fileName}`));
+        }
+        return false;
+      }
 
       if (options.dryRun) {
         console.log(chalk.blue(`  Would stage and commit: ${fileName}`));
@@ -140,12 +152,16 @@ export class CommitX {
         // Generate and show the commit message that would be used
         try {
           const spinner = ora('  Generating commit message...').start();
-          const suggestions = await this.getAIService().generateCommitMessage([fileDiff]);
+          const commitMessage = this.shouldUseSummaryMessage(file, totalChanges)
+            ? this.generateSummaryCommitMessage(file, fileDiff)
+            : (await this.getAIService().generateCommitMessage([fileDiff]))[0]?.message || `Updated ${fileName}`;
           spinner.succeed();
-          const commitMessage = suggestions[0]?.message || `Updated ${fileName}`;
           console.log(chalk.blue(`  Message: "${commitMessage}"`));
-        } catch (error) {
-          console.log(chalk.gray(`  Message: "Updated ${fileName}" (AI generation failed)`));
+        } catch {
+          const fallbackMessage = this.shouldUseSummaryMessage(file, totalChanges)
+            ? this.generateSummaryCommitMessage(file, fileDiff)
+            : this.generateFallbackCommitMessage(file, fileDiff);
+          console.log(chalk.gray(`  Message: "${fallbackMessage}" (AI generation failed)`));
         }
 
         return true;
@@ -153,9 +169,19 @@ export class CommitX {
 
       await this.gitService.stageFile(file);
 
-      const suggestions = await this.getAIService().generateCommitMessage([fileDiff]);
+      let commitMessage: string;
 
-      const commitMessage = suggestions[0]?.message || `Update ${fileName}`;
+      // For files with many changes or specific file types, use summary message
+      if (this.shouldUseSummaryMessage(file, totalChanges)) {
+        commitMessage = this.generateSummaryCommitMessage(file, fileDiff);
+      } else {
+        try {
+          const suggestions = await this.getAIService().generateCommitMessage([fileDiff]);
+          commitMessage = suggestions[0]?.message || this.generateFallbackCommitMessage(file, fileDiff);
+        } catch {
+          commitMessage = this.generateFallbackCommitMessage(file, fileDiff);
+        }
+      }
 
       await this.gitService.commit(commitMessage);
       console.log(chalk.green(`✅ Committed: ${commitMessage}`));
@@ -165,6 +191,146 @@ export class CommitX {
     } catch (error) {
       console.error(chalk.red(`  Failed to process ${file.split('/').pop()}: ${error}`));
       return false;
+    }
+  }
+
+  private shouldUseSummaryMessage = (file: string, totalChanges: number): boolean => {
+    const fileName = file.toLowerCase();
+    const baseName = file.split('/').pop()?.toLowerCase() || '';
+
+    // Always use summary for lock files
+    if (fileName.includes('yarn.lock') || fileName.includes('package-lock.json') || fileName.includes('pnpm-lock.yaml')) {
+      return true;
+    }
+
+    // Always use summary for generated files
+    if (fileName.includes('.generated.') || fileName.includes('.auto.') || fileName.includes('.min.')) {
+      return true;
+    }
+
+    // Always use summary for build artifacts
+    if (file.includes('/dist/') || file.includes('/build/') || file.includes('/.next/') || file.includes('/coverage/')) {
+      return true;
+    }
+
+    // Use summary for large files (more than 250 changes)
+    if (totalChanges > 250) {
+      return true;
+    }
+
+    // Use summary for certain file types with many changes (more than 50)
+    if (totalChanges > 50) {
+      const summaryFileExtensions = ['.json', '.xml', '.svg', '.css', '.scss', '.less'];
+      if (summaryFileExtensions.some(ext => fileName.endsWith(ext))) {
+        return true;
+      }
+    }
+
+    // Use summary for log files
+    if (baseName.includes('.log') || file.includes('/logs/')) {
+      return true;
+    }
+
+    // Use summary for documentation files with many changes
+    if (totalChanges > 30 && (fileName.endsWith('.md') || fileName.endsWith('.txt') || fileName.endsWith('.rst'))) {
+      return true;
+    }
+
+    return false;
+  }
+
+  private generateSummaryCommitMessage = (file: string, fileDiff: GitDiff): string => {
+    const fileName = file.split('/').pop() || file;
+    const baseName = fileName.toLowerCase();
+    const totalChanges = fileDiff.additions + fileDiff.deletions;
+
+    // Always use descriptive style - no prefixes, just the message
+    const formatMessage = (type: string, message: string): string => {
+      return message; // Descriptive style: no prefixes
+    };
+
+    // Lock file specific messages
+    if (baseName.includes('yarn.lock')) {
+      if (fileDiff.additions > fileDiff.deletions * 2) {
+        return formatMessage('chore', 'Added new dependencies to yarn.lock');
+      } else if (fileDiff.deletions > fileDiff.additions * 2) {
+        return formatMessage('chore', 'Removed dependencies from yarn.lock');
+      } else {
+        return formatMessage('chore', 'Updated dependencies in yarn.lock');
+      }
+    }
+
+    if (baseName.includes('package-lock.json')) {
+      return formatMessage('chore', 'Updated package-lock.json dependencies');
+    }
+
+    if (baseName.includes('pnpm-lock.yaml')) {
+      return formatMessage('chore', 'Updated pnpm-lock.yaml dependencies');
+    }
+
+    // Generated files
+    if (file.includes('.generated.') || file.includes('.auto.') || file.includes('.min.')) {
+      return formatMessage('chore', `Updated generated file ${fileName}`);
+    }
+
+    // Build artifacts
+    if (file.includes('/dist/') || file.includes('/build/')) {
+      return formatMessage('build', `Updated compiled ${fileName}`);
+    }
+
+    if (file.includes('/.next/')) {
+      return formatMessage('build', 'Updated Next.js build artifacts');
+    }
+
+    if (file.includes('/coverage/')) {
+      return formatMessage('test', 'Updated code coverage reports');
+    }
+
+    // Large files
+    if (totalChanges > 200) {
+      return formatMessage('refactor', `Major updates to ${fileName} (+${fileDiff.additions}/-${fileDiff.deletions} lines)`);
+    } else if (totalChanges > 100) {
+      return formatMessage('chore', `Significant updates to ${fileName} (+${fileDiff.additions}/-${fileDiff.deletions} lines)`);
+    }
+
+    // Configuration files
+    if (baseName.endsWith('.json') && totalChanges > 50) {
+      return formatMessage('config', `Updated ${fileName} configuration`);
+    }
+
+    // Stylesheets
+    if ((baseName.endsWith('.css') || baseName.endsWith('.scss') || baseName.endsWith('.less')) && totalChanges > 50) {
+      return formatMessage('style', `Updated ${fileName} styles`);
+    }
+
+    // Documentation
+    if ((baseName.endsWith('.md') || baseName.endsWith('.txt') || baseName.endsWith('.rst')) && totalChanges > 30) {
+      return formatMessage('docs', `Updated ${fileName} documentation`);
+    }
+
+    // Log files
+    if (baseName.includes('.log') || file.includes('/logs/')) {
+      return formatMessage('chore', `Updated log file ${fileName}`);
+    }
+
+    // Default for large changes
+    return formatMessage('chore', `Updated ${fileName} with ${totalChanges} changes`);
+  }
+
+  private generateFallbackCommitMessage = (file: string, fileDiff: GitDiff): string => {
+    const fileName = file.split('/').pop() || file;
+
+    // Generate specific descriptive fallback messages (7-15 words)
+    if (fileDiff.isNew) {
+      return `Created new ${fileName} file with initial implementation`;
+    } else if (fileDiff.isDeleted) {
+      return `Removed ${fileName} file as it is no longer needed`;
+    } else if (fileDiff.additions > fileDiff.deletions * 2) {
+      return `Added new functionality and features to ${fileName} file`;
+    } else if (fileDiff.deletions > fileDiff.additions * 2) {
+      return `Removed unused code and functions from ${fileName} file`;
+    } else {
+      return `Modified ${fileName} file with code improvements and updates`;
     }
   }
 
@@ -200,7 +366,7 @@ export class CommitX {
 
 
   private promptCommitSelection = async (suggestions: CommitSuggestion[], file?: string): Promise<string> => {
-    const choices = suggestions.map((suggestion, index) => ({
+    const choices = suggestions.map((suggestion) => ({
       name: `${chalk.green(suggestion.message)}${suggestion.description ? chalk.gray(` - ${suggestion.description}`) : ''}`,
       value: suggestion.message,
       short: suggestion.message
@@ -258,7 +424,7 @@ export class CommitX {
   }
 
 
-  private async promptStageFiles(status: { unstaged: string[]; untracked: string[] }): Promise<boolean> {
+  private promptStageFiles = async (status: { unstaged: string[]; untracked: string[] }): Promise<boolean> => {
     console.log(chalk.yellow('\nUnstaged changes detected:'));
 
     if (status.unstaged.length > 0) {
@@ -284,7 +450,7 @@ export class CommitX {
   }
 
 
-  async status(): Promise<void> {
+  status = async (): Promise<void> => {
     try {
       if (!(await this.gitService.isGitRepository())) {
         console.log(chalk.red('Not a git repository'));
@@ -335,7 +501,7 @@ export class CommitX {
     }
   }
 
-  async diff(): Promise<void> {
+  diff = async (): Promise<void> => {
     try {
       if (!(await this.gitService.isGitRepository())) {
         console.log(chalk.red('Not a git repository'));
