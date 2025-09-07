@@ -126,12 +126,13 @@ export class AIService {
 
     prompt += 'IMPORTANT GUIDELINES:\n';
     prompt += '1. ALWAYS start with CAPITAL LETTER (e.g., "Added", "Fixed", "Updated", "Refactored")\n';
-    prompt += '2. Use PAST TENSE (e.g., "Added", "Fixed", "Updated", "Refactored")\n';
+    prompt += '2. MANDATORY: Use PAST TENSE ONLY (e.g., "Added", "Fixed", "Updated", "Refactored", "Removed", "Deleted", "Created", "Improved", "Enhanced", "Refactored", "Optimized", "Simplified", "Automated", "Integrated", "Added", "Fixed", "Updated", "Refactored", "Removed", "Deleted", "Created", "Improved", "Enhanced", "Refactored", "Optimized", "Simplified", "Automated", "Integrated")\n';
     prompt += '3. Be SPECIFIC and MEANINGFUL (avoid generic messages like "Updated files" or "Fixed bug")\n';
     prompt += '4. Focus on WHAT was changed and WHY it was necessary\n';
     prompt += '5. Use ATOMIC approach - describe the specific change in this file\n';
     prompt += '6. ANALYZE the actual diff content to understand what was removed, added, or modified\n';
-    prompt += '7. Mention specific methods, functions, or code sections that were changed\n\n';
+    prompt += '7. Mention specific methods, functions, or code sections that were changed\n';
+    prompt += '8. NEVER use present tense like "Add", "Fix", "Update" - ALWAYS use past tense\n\n';
 
     switch (config.style) {
       case 'conventional':
@@ -227,6 +228,7 @@ export class AIService {
     prompt += 'If code was REMOVED (lines starting with -), use words like "Removed", "Deleted", "Eliminated".\n';
     prompt += 'If code was ADDED (lines starting with +), use words like "Added", "Implemented", "Created".\n';
     prompt += 'If code was MODIFIED (both + and -), use words like "Updated", "Refactored", "Modified".\n';
+    prompt += 'CRITICAL: ALL messages MUST start with PAST TENSE verbs (Added, Fixed, Updated, Removed, etc.)\n';
     prompt += 'Return as JSON: {"suggestions": [{"message": "...", "description": "...", "confidence": 0.95}]}\n';
 
     return prompt;
