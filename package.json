@@ -23,7 +23,7 @@
     "status": "yarn cx status",
     "diff": "yarn cx diff",
     "config": "yarn cx config get",
-    "config:set": "yarn cx config set",
+    "config:model": "yarn cx config set model",
     "config:reset": "yarn cx config reset",
     "setup": "yarn cx setup",
     "help": "yarn cx help-examples"
