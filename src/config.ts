@@ -78,15 +78,15 @@ export class ConfigManager {
     }, { operation: 'saveConfig' });
   }
 
-  public getConfig(): CommitConfig {
+  public getConfig = (): CommitConfig => {
     return { ...this.config };
   }
 
-  public get(key: keyof CommitConfig): any {
+  public get = (key: keyof CommitConfig): any => {
     return this.config[key];
   }
 
-  public set(key: keyof CommitConfig, value: any): void {
+  public set = (key: keyof CommitConfig, value: any): void => {
     withErrorHandling(() => {
       // Validate key
       const keyValidation = validateConfigKey(key);
@@ -115,7 +115,7 @@ export class ConfigManager {
     }, { operation: 'setConfig', key });
   }
 
-  public getApiKey(): string {
+  public getApiKey = (): string => {
     // Always prioritize environment variable for security
     const envKey = process.env.GEMINI_API_KEY;
     if (envKey) {
@@ -137,7 +137,7 @@ export class ConfigManager {
     return '';
   }
 
-  public reset(): void {
+  public reset = (): void => {
     this.config = { ...DEFAULT_CONFIG };
     this.saveConfig(this.config);
   }
@@ -157,9 +157,8 @@ export class ConfigManager {
         } else {
           console.warn(`Invalid config value for ${key}: ${valueValidation.error}`);
         }
-      } else {
-        console.warn(`Invalid config key: ${key}`);
       }
+      // Silently ignore invalid keys (like old 'style' key)
     }
 
     return validatedConfig;
