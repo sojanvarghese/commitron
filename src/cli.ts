@@ -259,9 +259,10 @@ program
     console.log('');
 
     console.log(chalk.yellow('Configuration:'));
-    console.log('  yarn cx:setup                  # Interactive setup');
-    console.log('  yarn cx:config                 # View configuration');
-    console.log('  yarn cx:config:reset           # Reset configuration');
+    console.log('  yarn setup                     # Interactive setup');
+    console.log('  yarn config                    # View configuration');
+    console.log('  yarn config:set                # Set configuration values');
+    console.log('  yarn config:reset              # Reset configuration');
   });
 
 // Default action for commit when no subcommand is provided
