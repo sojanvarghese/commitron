@@ -1,8 +1,6 @@
 # CommitX
 
-[![npm version](https://badge.fury.io/js/commit-x.svg)](https://badge.fury.io/js/commit-x)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Node.js Version](https://img.shields.io/node/v/commit-x.svg)](https://nodejs.org/)
 
 > AI-powered Git commit assistant that intelligently analyzes your code changes and generates clear, concise, and context-aware commit messages using Google's Gemini AI.
 
@@ -26,11 +24,14 @@
 ### Installation
 
 ```bash
-# Install globally
-npm install -g commit-x
+# Clone and install locally
+git clone https://github.com/sojanvarghese/commit-x.git
+cd commit-x
+yarn install
+yarn build
 
-# Or install locally in your project
-yarn add -D commit-x
+# Install globally (after building)
+yarn global add file:.
 ```
 
 ### Setup
@@ -64,8 +65,10 @@ commit-x commit --dry-run
 | `commit-x commit --all` | Stage all files and commit together |
 | `commit-x commit --dry-run` | Preview commits without executing |
 | `commit-x status` | Show repository status |
-| `commit-x diff` | Show changes summary |
+| `commit-x diff` | Show changes summary (staged changes only) |
 | `commit-x config` | View configuration |
+| `commit-x config set <key> <value>` | Set configuration value |
+| `commit-x config reset` | Reset configuration to defaults |
 | `commit-x setup` | Interactive setup |
 
 ## ⚙️ Configuration
@@ -76,7 +79,6 @@ commit-x config
 
 # Set configuration values
 commit-x config set model gemini-1.5-flash
-commit-x config set style conventional
 
 # Reset to defaults
 commit-x config reset
@@ -89,20 +91,6 @@ commit-x config reset
 | `apiKey` | string | - | Gemini AI API key (use environment variable) |
 | `model` | string | `gemini-1.5-flash` | AI model to use |
 
-## 🔧 Development
-
-### Local Development
-
-```bash
-# Clone and setup
-git clone https://github.com/sojanvarghese/commit-x.git
-cd commit-x
-yarn install
-yarn build
-
-# Run locally
-yarn cx commit
-```
 
 ### Available Scripts
 
@@ -115,15 +103,11 @@ yarn cx commit
 | `yarn commit` | Process files individually |
 | `yarn commit:all` | Stage all files and commit together |
 
-## 🤝 Contributing
-
-Contributions are welcome! Please feel free to submit a Pull Request.
-
-## 📄 License
+## License
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
-## 🙏 Acknowledgments
+## Acknowledgments
 
 - [Google Gemini AI](https://ai.google.dev/) for the AI capabilities
 - [Simple Git](https://github.com/steveukx/git-js) for Git operations
