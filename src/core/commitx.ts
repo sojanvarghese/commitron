@@ -128,6 +128,16 @@ export class CommitX {
       if (options.dryRun) {
         console.log(chalk.blue(`  Would stage and commit: ${fileName}`));
         console.log(chalk.gray(`  Changes: +${fileDiff.additions}/-${fileDiff.deletions}`));
+
+        // Generate and show the commit message that would be used
+        try {
+          const suggestions = await this.getAIService().generateCommitMessage([fileDiff]);
+          const commitMessage = suggestions[0]?.message || `Update ${fileName}`;
+          console.log(chalk.blue(`  Message: "${commitMessage}"`));
+        } catch (error) {
+          console.log(chalk.gray(`  Message: "Update ${fileName}" (AI generation failed)`));
+        }
+
         return true;
       }
 
