@@ -8,7 +8,7 @@ AI-powered Git commit assistant that analyzes your code changes and generates me
 - **Multiple Styles**: Support for conventional, descriptive, and minimal commit message formats
 - **Individual Processing**: Commits files individually with tailored messages
 - **Interactive Mode**: Choose from AI-generated suggestions or write custom messages
-- **E2E Test Support**: Special handling for Playwright and testing files
+
 
 ## Installation
 
@@ -31,36 +31,54 @@ yarn global add file:.
 
 1. **Setup**:
    ```bash
-   commit-x setup
+   yarn cx:setup
    ```
 
 2. **Commit changes**:
    ```bash
-   commit-x commit
+   yarn commit
    ```
 
 ## Usage
 
 ### Commands
 ```bash
-commit-x commit              # Process files individually with AI
-commit-x commit --all        # Stage all files and commit together
-commit-x commit -m "message" # Use custom message
-commit-x status              # Show repository status
-commit-x diff                # Show changes summary
-commit-x config get          # View configuration
-commit-x setup               # Interactive setup
+yarn commit                  # Process files individually with AI
+yarn commit:all              # Stage all files and commit together
+yarn commit:dry              # Preview commits without executing
+yarn status                  # Show repository status
+yarn diff                    # Show changes summary
+yarn cx:config               # View configuration
+yarn cx:setup                # Interactive setup
+yarn cx:help                 # Show usage examples
 ```
 
 ### Configuration
 ```bash
 # Set configuration values
-commit-x config set style conventional
-commit-x config set model gemini-1.5-flash
+yarn cx:config:set style conventional
+yarn cx:config:set model gemini-1.5-flash
 
 # View configuration
-commit-x config get
+yarn cx:config
 ```
+
+### Yarn Scripts
+All commands are available as convenient yarn scripts:
+
+| Script | Description |
+|--------|-------------|
+| `yarn commit` | Process files individually with AI |
+| `yarn commit:all` | Stage all files and commit together |
+| `yarn commit:dry` | Preview commits without executing |
+| `yarn status` | Show repository status |
+| `yarn diff` | Show changes summary |
+| `yarn cx:config` | View configuration |
+| `yarn cx:config:set` | Set configuration values |
+| `yarn cx:config:reset` | Reset to defaults |
+| `yarn cx:setup` | Interactive setup |
+| `yarn cx:help` | Show usage examples |
+| `yarn cx` | Direct CLI access |
 
 ## Configuration Options
 
