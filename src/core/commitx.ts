@@ -131,11 +131,13 @@ export class CommitX {
 
         // Generate and show the commit message that would be used
         try {
+          const spinner = ora('  Generating commit message...').start();
           const suggestions = await this.getAIService().generateCommitMessage([fileDiff]);
-          const commitMessage = suggestions[0]?.message || `Update ${fileName}`;
+          spinner.succeed();
+          const commitMessage = suggestions[0]?.message || `Updated ${fileName}`;
           console.log(chalk.blue(`  Message: "${commitMessage}"`));
         } catch (error) {
-          console.log(chalk.gray(`  Message: "Update ${fileName}" (AI generation failed)`));
+          console.log(chalk.gray(`  Message: "Updated ${fileName}" (AI generation failed)`));
         }
 
         return true;
