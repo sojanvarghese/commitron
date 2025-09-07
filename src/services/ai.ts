@@ -1,12 +1,7 @@
 import { GoogleGenerativeAI } from '@google/generative-ai';
-import { CommitSuggestion, CommitConfig, GitDiff, CommitType } from '../types/common.js';
+import { CommitSuggestion, CommitConfig, GitDiff } from '../types/common.js';
 import { ConfigManager } from '../config.js';
-import {
-  analyzeCommitType,
-  extractScope,
-  generateDescription,
-  validateCommitMessage as validateMessage
-} from '../utils/commit-helpers.js';
+// No longer needed - using descriptive style only
 import {
   validateDiffSize,
   validateApiKey,
@@ -69,7 +64,23 @@ export class AIService {
           );
         }
 
-        for (const diff of diffs) {
+        // Filter out empty diffs (no changes and no content)
+        const meaningfulDiffs = diffs.filter(diff => {
+          const hasChanges = diff.additions > 0 || diff.deletions > 0;
+          const hasContent = diff.changes && diff.changes.trim() !== '';
+          return hasChanges || hasContent;
+        });
+
+        if (meaningfulDiffs.length === 0) {
+          throw new SecureError(
+            'No meaningful changes found in provided diffs',
+            ErrorType.VALIDATION_ERROR,
+            { operation: 'generateCommitMessage' },
+            true
+          );
+        }
+
+        for (const diff of meaningfulDiffs) {
           const diffValidation = validateDiffSize(diff.changes, DEFAULT_LIMITS.maxDiffSize);
           if (!diffValidation.isValid) {
             throw new SecureError(
@@ -84,8 +95,7 @@ export class AIService {
         const config = this.config.getConfig();
         const model = this.genAI.getGenerativeModel({ model: config.model || AI_DEFAULT_MODEL });
 
-        const analysisContext = this.analyzeChanges(diffs);
-        const prompt = this.buildEnhancedPrompt(diffs, config, analysisContext);
+        const prompt = this.buildEnhancedPrompt(meaningfulDiffs);
 
         if (prompt.length > DEFAULT_LIMITS.maxApiRequestSize) {
           throw new SecureError(
@@ -101,163 +111,112 @@ export class AIService {
           DEFAULT_LIMITS.timeoutMs
         );
         const text = response.text();
-        const suggestions = this.parseResponse(text, config);
+        const suggestions = this.parseResponse(text);
 
-        return this.validateAndImprove(suggestions, analysisContext);
+        return this.validateAndImprove(suggestions);
       }, { operation: 'generateCommitMessage' });
     }, AI_RETRY_ATTEMPTS, AI_RETRY_DELAY_MS, { operation: 'generateCommitMessage' });
   }
 
-  private getMaxLengthForStyle = (style: 'conventional' | 'descriptive' | 'minimal'): number => {
-    switch (style) {
-      case 'conventional':
-        return 72; // Standard for conventional commits with type(scope): format
-      case 'descriptive':
-        return 96; // Longer for detailed descriptions
-      case 'minimal':
-        return 50; // Shorter for concise messages
-      default:
-        return 72;
-    }
+  private getMaxLengthForStyle = (): number => {
+    return 96; // Standard length for descriptive commit messages
   }
 
-  private getDefaultPrompt = (config: CommitConfig): string => {
-    let prompt = 'You are an expert Git commit message generator. ';
+  private getDefaultPrompt = (): string => {
+    let prompt = 'You are an expert at analyzing code changes and generating precise commit messages.\n\n';
 
-    prompt += 'IMPORTANT GUIDELINES:\n';
-    prompt += '1. ALWAYS start with CAPITAL LETTER (e.g., "Added", "Fixed", "Updated", "Refactored")\n';
-    prompt += '2. MANDATORY: Use PAST TENSE ONLY (e.g., "Added", "Fixed", "Updated", "Refactored", "Removed", "Deleted", "Created", "Improved", "Enhanced", "Refactored", "Optimized", "Simplified", "Automated", "Integrated", "Added", "Fixed", "Updated", "Refactored", "Removed", "Deleted", "Created", "Improved", "Enhanced", "Refactored", "Optimized", "Simplified", "Automated", "Integrated")\n';
-    prompt += '3. Be SPECIFIC and MEANINGFUL (avoid generic messages like "Updated files" or "Fixed bug")\n';
-    prompt += '4. Focus on WHAT was changed and WHY it was necessary\n';
-    prompt += '5. Use ATOMIC approach - describe the specific change in this file\n';
-    prompt += '6. ANALYZE the actual diff content to understand what was removed, added, or modified\n';
-    prompt += '7. Mention specific methods, functions, or code sections that were changed\n';
-    prompt += '8. NEVER use present tense like "Add", "Fix", "Update" - ALWAYS use past tense\n\n';
+    prompt += 'REQUIREMENTS:\n';
+    prompt += '- Generate 7-15 words describing EXACTLY what changed in the code\n';
+    prompt += '- Be SPECIFIC about the actual changes, not generic improvements\n';
+    prompt += '- Use past tense verbs: "Converted", "Added", "Removed", "Replaced", "Refactored"\n';
+    prompt += '- NO prefixes like "feat:", "fix:", "chore:"\n';
+    prompt += '- Focus on the CODE CHANGES, not theoretical benefits\n\n';
 
-    switch (config.style) {
-      case 'conventional':
-        prompt += 'Generate commit messages following Conventional Commits specification:\n';
-        prompt += '- Format: type(scope): Past-tense description starting with capital letter\n';
-        prompt += '- Types: feat, fix, docs, style, refactor, perf, test, e2e, build, ci, chore\n';
-        prompt += '- Examples:\n';
-        prompt += '  * "feat(auth): Added OAuth2 integration with Google provider"\n';
-        prompt += '  * "fix(api): Resolved null pointer exception in user validation"\n';
-        prompt += '  * "e2e(playwright): Added page object model for login flow"\n';
-        prompt += '  * "e2e(spec): Updated E2E test assertions for checkout process"\n';
-        prompt += '  * "refactor(utils): Extracted validation logic into separate module"\n';
-        break;
+    prompt += 'GOOD EXAMPLES (specific to actual changes):\n';
+    prompt += '- "Converted getUserData function from regular function to arrow function"\n';
+    prompt += '- "Added email validation regex pattern to user input validator"\n';
+    prompt += '- "Removed unused import statements and cleaned up dependencies"\n';
+    prompt += '- "Replaced setTimeout with setInterval in polling mechanism"\n';
+    prompt += '- "Refactored database query methods to use async await syntax"\n\n';
 
-      case 'descriptive':
-        prompt += 'Generate highly descriptive commit messages in past tense with capital letters:\n';
-        prompt += '- Clearly explain WHAT was changed, WHY it was changed, and HOW it impacts the system\n';
-        prompt += '- Be specific about the functionality, methods, or business logic involved\n';
-        prompt += '- Include context about the problem being solved or feature being added\n';
-        prompt += '- Examples:\n';
-        prompt += '  * "Implemented comprehensive error handling with retry logic for API requests to prevent timeout failures"\n';
-        prompt += '  * "Refactored user authentication system to use JWT tokens instead of session cookies for better scalability"\n';
-        prompt += '  * "Added E2E test spec for complete user registration flow including email verification"\n';
-        prompt += '  * "Updated page object model with new CSS selectors after login UI redesign"\n';
-        prompt += '  * "Fixed memory leak in WebSocket event listener cleanup that caused browser crashes"\n';
-        prompt += '  * "Enhanced form validation to include real-time feedback and accessibility improvements"\n';
-        break;
+    prompt += 'BAD EXAMPLES (avoid these generic patterns):\n';
+    prompt += '- "Enhanced service logic for improved performance" (too generic)\n';
+    prompt += '- "Updated configuration for better functionality" (vague)\n';
+    prompt += '- "Improved code quality and maintainability" (meaningless)\n';
+    prompt += '- "Enhanced data processing capabilities" (no specifics)\n\n';
 
-      case 'minimal':
-        prompt += 'Generate concise commit messages in past tense with capital letters:\n';
-        prompt += '- Short but meaningful descriptions\n';
-        prompt += '- Examples:\n';
-        prompt += '  * "Added user validation"\n';
-        prompt += '  * "Fixed login bug"\n';
-        prompt += '  * "Added E2E tests"\n';
-        prompt += '  * "Updated page objects"\n';
-        prompt += '  * "Updated dependencies"\n';
-        break;
-    }
-
-    const maxLength = this.getMaxLengthForStyle(config.style || 'conventional');
-    prompt += `\nKeep first line under ${maxLength} characters. `;
-    prompt += 'Avoid vague terms like "updated", "changed", "modified" without context. ';
-    prompt += 'Be specific about the actual functionality or improvement implemented. ';
+    prompt += 'ANALYZE the actual code diff and describe the SPECIFIC technical changes made.\n';
 
     return prompt;
   }
 
-  private analyzeChanges = (diffs: GitDiff[]) => {
-    const primaryDiff = diffs[0];
+  private buildEnhancedPrompt = (diffs: GitDiff[]): string => {
+    let prompt = this.getDefaultPrompt();
 
-    return {
-      commitType: analyzeCommitType(diffs),
-      scope: extractScope(primaryDiff.file),
-      description: generateDescription(primaryDiff),
-      fileCount: diffs.length,
-      totalAdditions: diffs.reduce((sum, diff) => sum + diff.additions, 0),
-      totalDeletions: diffs.reduce((sum, diff) => sum + diff.deletions, 0)
-    };
-  }
+    prompt += `\n\nFILE ANALYSIS:\n`;
 
-  private buildEnhancedPrompt = (diffs: GitDiff[], config: CommitConfig, analysis: any): string => {
-    let prompt = this.getDefaultPrompt(config);
-
-    prompt += `\n\nChange Analysis Context:\n`;
-    prompt += `- Suggested commit type: ${analysis.commitType}\n`;
-    prompt += `- File scope: ${analysis.scope || 'general'}\n`;
-    prompt += `- Suggested description: ${analysis.description}\n`;
-    prompt += `- Total changes: +${analysis.totalAdditions}/-${analysis.totalDeletions}\n`;
-
-    prompt += '\n\nCode Changes to Analyze:\n';
+    // Show the actual diff content for precise analysis
     diffs.forEach((diff, index) => {
-      prompt += `\nFile ${index + 1}: ${diff.file}\n`;
-
       let status = 'Modified';
-      if (diff.isNew) status = 'New file';
-      else if (diff.isDeleted) status = 'Deleted file';
-      else if (diff.isRenamed) status = `Renamed from ${diff.oldPath}`;
+      if (diff.isNew) status = 'New file created';
+      else if (diff.isDeleted) status = 'File deleted';
+      else if (diff.isRenamed) status = 'File renamed';
 
+      prompt += `\nFile: ${diff.file}\n`;
       prompt += `Status: ${status}\n`;
-      prompt += `Changes: +${diff.additions} -${diff.deletions}\n`;
+      prompt += `Changes: +${diff.additions} lines, -${diff.deletions} lines\n`;
+
       if (diff.changes && diff.changes.trim()) {
-        const diffPreview = diff.changes.substring(0, AI_DIFF_PREVIEW_LENGTH);
-        prompt += `\nDiff (lines starting with - are removed, + are added):\n${diffPreview}\n`;
-        if (diff.changes.length > AI_DIFF_PREVIEW_LENGTH) {
-          prompt += '... (truncated)\n';
+        // Show more of the actual diff content for better analysis
+        const diffPreview = diff.changes.substring(0, 2000); // Increased from AI_DIFF_PREVIEW_LENGTH
+        prompt += `\nActual code changes:\n${diffPreview}\n`;
+        if (diff.changes.length > 2000) {
+          prompt += '... (diff truncated)\n';
         }
       }
     });
 
-    prompt += '\n\nGenerate 3 commit message suggestions following the guidelines above.\n';
-    prompt += 'Be SPECIFIC about what was actually changed based on the diff content.\n';
-    prompt += 'If code was REMOVED (lines starting with -), use words like "Removed", "Deleted", "Eliminated".\n';
-    prompt += 'If code was ADDED (lines starting with +), use words like "Added", "Implemented", "Created".\n';
-    prompt += 'If code was MODIFIED (both + and -), use words like "Updated", "Refactored", "Modified".\n';
-    prompt += 'CRITICAL: ALL messages MUST start with PAST TENSE verbs (Added, Fixed, Updated, Removed, etc.)\n';
-    prompt += 'Return as JSON: {"suggestions": [{"message": "...", "description": "...", "confidence": 0.95}]}\n';
+    prompt += '\nBased on the ACTUAL CODE CHANGES shown above:\n';
+    prompt += '1. Identify the SPECIFIC technical changes made (what functions/methods/syntax changed)\n';
+    prompt += '2. Generate a precise 7-15 word message describing exactly what was changed\n';
+    prompt += '3. Focus on the code modifications, not generic improvements\n';
+    prompt += '\nReturn as JSON: {"suggestions": [{"message": "...", "description": "...", "confidence": 0.95}]}\n';
 
     return prompt;
   }
 
-  private validateAndImprove = (suggestions: CommitSuggestion[], analysis: any): CommitSuggestion[] => {
+  private validateAndImprove = (suggestions: CommitSuggestion[]): CommitSuggestion[] => {
     return suggestions.map(suggestion => {
-      const validation = validateMessage(suggestion.message);
+      let improvedMessage = suggestion.message.trim();
 
-      if (!validation.valid) {
-        let improvedMessage = suggestion.message;
+      // Validate word count (7-15 words) - reject messages that are too short/long
+      const wordCount = improvedMessage.split(/\s+/).length;
+      let confidence = suggestion.confidence || 0.8;
 
-        if (suggestion.message.length > 72) {
-          improvedMessage = improvedMessage.substring(0, 69) + '...';
-        }
-
-        return {
-          ...suggestion,
-          message: improvedMessage,
-          description: suggestion.description + ' (auto-improved)',
-          confidence: Math.max(0.7, (suggestion.confidence || 0.8) - 0.1)
-        };
+      if (wordCount < 7) {
+        // Don't add filler words - mark as low confidence instead
+        confidence = Math.max(0.3, confidence - 0.4);
+      } else if (wordCount > 15) {
+        // Truncate to exactly 15 words without adding filler
+        const words = improvedMessage.split(/\s+/);
+        improvedMessage = words.slice(0, 15).join(' ');
+        confidence = Math.max(0.6, confidence - 0.1);
       }
 
-      return suggestion;
+      // Ensure proper length
+      if (improvedMessage.length > 96) {
+        improvedMessage = improvedMessage.substring(0, 93) + '...';
+      }
+
+      return {
+        ...suggestion,
+        message: improvedMessage,
+        confidence
+      };
     });
   }
 
-  private parseResponse = (response: string, config: CommitConfig): CommitSuggestion[] => {
+  private parseResponse = (response: string): CommitSuggestion[] => {
     try {
       const jsonMatch = response.match(/\{[\s\S]*\}/);
       if (!jsonMatch) {
@@ -275,14 +234,14 @@ export class AIService {
           confidence: suggestion.confidence || 0.8
         }));
       }
-    } catch (error) {
+    } catch {
       console.warn('Failed to parse JSON response, falling back to text parsing');
     }
 
-    return this.parseTextResponse(response, config);
+    return this.parseTextResponse(response);
   }
 
-  private parseTextResponse = (response: string, config: CommitConfig): CommitSuggestion[] => {
+  private parseTextResponse = (response: string): CommitSuggestion[] => {
     const lines = response.split('\n').filter(line => line.trim());
     const suggestions: CommitSuggestion[] = [];
 
@@ -309,27 +268,4 @@ export class AIService {
     return suggestions.slice(0, AI_MAX_SUGGESTIONS);
   }
 
-  validateCommitMessage = (message: string, style: string): { valid: boolean; errors: string[] } => {
-    const errors: string[] = [];
-
-    if (!message || message.trim().length === 0) {
-      errors.push('Commit message cannot be empty');
-    }
-
-    if (message.length > 72) {
-      errors.push('First line should be 72 characters or less');
-    }
-
-    if (style === 'conventional') {
-      const conventionalPattern = /^(feat|fix|docs|style|refactor|perf|test|build|ci|chore|revert)(\(.+\))?: .+/;
-      if (!conventionalPattern.test(message)) {
-        errors.push('Message does not follow conventional commit format');
-      }
-    }
-
-    return {
-      valid: errors.length === 0,
-      errors
-    };
-  }
 }
