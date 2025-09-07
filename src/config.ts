@@ -142,9 +142,7 @@ export class ConfigManager {
     this.saveConfig(this.config);
   }
 
-  /**
-   * Validates configuration object
-   */
+
   private validateConfig = (config: Partial<CommitConfig>): Partial<CommitConfig> => {
     const validatedConfig: Partial<CommitConfig> = {};
 
@@ -158,7 +156,6 @@ export class ConfigManager {
           console.warn(`Invalid config value for ${key}: ${valueValidation.error}`);
         }
       }
-      // Silently ignore invalid keys (like old 'style' key)
     }
 
     return validatedConfig;
