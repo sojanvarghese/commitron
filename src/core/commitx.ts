@@ -244,77 +244,73 @@ export class CommitX {
     const baseName = fileName.toLowerCase();
     const totalChanges = fileDiff.additions + fileDiff.deletions;
 
-    // Always use descriptive style - no prefixes, just the message
-    const formatMessage = (type: string, message: string): string => {
-      return message; // Descriptive style: no prefixes
-    };
 
     // Lock file specific messages
     if (baseName.includes('yarn.lock')) {
       if (fileDiff.additions > fileDiff.deletions * 2) {
-        return formatMessage('chore', 'Added new dependencies to yarn.lock');
+        return 'Added new dependencies to yarn.lock';
       } else if (fileDiff.deletions > fileDiff.additions * 2) {
-        return formatMessage('chore', 'Removed dependencies from yarn.lock');
+        return 'Removed dependencies from yarn.lock';
       } else {
-        return formatMessage('chore', 'Updated dependencies in yarn.lock');
+        return 'Updated dependencies in yarn.lock';
       }
     }
 
     if (baseName.includes('package-lock.json')) {
-      return formatMessage('chore', 'Updated package-lock.json dependencies');
+      return 'Updated package-lock.json dependencies';
     }
 
     if (baseName.includes('pnpm-lock.yaml')) {
-      return formatMessage('chore', 'Updated pnpm-lock.yaml dependencies');
+      return 'Updated pnpm-lock.yaml dependencies';
     }
 
     // Generated files
     if (file.includes('.generated.') || file.includes('.auto.') || file.includes('.min.')) {
-      return formatMessage('chore', `Updated generated file ${fileName}`);
+      return `Updated generated file ${fileName}`;
     }
 
     // Build artifacts
     if (file.includes('/dist/') || file.includes('/build/')) {
-      return formatMessage('build', `Updated compiled ${fileName}`);
+      return `Updated compiled ${fileName}`;
     }
 
     if (file.includes('/.next/')) {
-      return formatMessage('build', 'Updated Next.js build artifacts');
+      return 'Updated Next.js build artifacts';
     }
 
     if (file.includes('/coverage/')) {
-      return formatMessage('test', 'Updated code coverage reports');
+      return 'Updated code coverage reports';
     }
 
     // Large files
     if (totalChanges > 200) {
-      return formatMessage('refactor', `Major updates to ${fileName} (+${fileDiff.additions}/-${fileDiff.deletions} lines)`);
+      return `Major updates to ${fileName} (+${fileDiff.additions}/-${fileDiff.deletions} lines)`;
     } else if (totalChanges > 100) {
-      return formatMessage('chore', `Significant updates to ${fileName} (+${fileDiff.additions}/-${fileDiff.deletions} lines)`);
+      return `Significant updates to ${fileName} (+${fileDiff.additions}/-${fileDiff.deletions} lines)`;
     }
 
     // Configuration files
     if (baseName.endsWith('.json') && totalChanges > 50) {
-      return formatMessage('config', `Updated ${fileName} configuration`);
+      return `Updated ${fileName} configuration`;
     }
 
     // Stylesheets
     if ((baseName.endsWith('.css') || baseName.endsWith('.scss') || baseName.endsWith('.less')) && totalChanges > 50) {
-      return formatMessage('style', `Updated ${fileName} styles`);
+      return `Updated ${fileName} styles`;
     }
 
     // Documentation
     if ((baseName.endsWith('.md') || baseName.endsWith('.txt') || baseName.endsWith('.rst')) && totalChanges > 30) {
-      return formatMessage('docs', `Updated ${fileName} documentation`);
+      return `Updated ${fileName} documentation`;
     }
 
     // Log files
     if (baseName.includes('.log') || file.includes('/logs/')) {
-      return formatMessage('chore', `Updated log file ${fileName}`);
+      return `Updated log file ${fileName}`;
     }
 
     // Default for large changes
-    return formatMessage('chore', `Updated ${fileName} with ${totalChanges} changes`);
+    return `Updated ${fileName} with ${totalChanges} changes`;
   }
 
   private generateFallbackCommitMessage = (file: string, fileDiff: GitDiff): string => {
