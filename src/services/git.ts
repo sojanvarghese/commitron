@@ -1,5 +1,6 @@
 import type { SimpleGit } from 'simple-git';
 import simpleGit from 'simple-git';
+import chalk from 'chalk';
 import type { GitDiff, GitStatus } from '../types/common.js';
 import {
   validateAndSanitizePath,
@@ -151,6 +152,27 @@ export class GitService {
 
           const diffValidation = validateDiffSize(diff);
           if (!diffValidation.isValid) {
+            // For lock files, use summary data instead of full diff content
+            const isLockFile =
+              relativeFile.includes('yarn.lock') ||
+              relativeFile.includes('package-lock.json') ||
+              relativeFile.includes('pnpm-lock.yaml');
+
+            if (isLockFile) {
+              const fileSummary = diffSummary.files.find((f: any) => f.file === relativeFile);
+              return {
+                file: validatedFile,
+                additions: fileSummary?.insertions || 0,
+                deletions: fileSummary?.deletions || 0,
+                changes: `Lock file updated: ${fileSummary?.insertions || 0} additions, ${fileSummary?.deletions || 0} deletions`,
+                isNew:
+                  status.created.includes(relativeFile) || status.not_added.includes(relativeFile),
+                isDeleted: status.deleted.includes(relativeFile),
+                isRenamed: status.renamed.some((r: any) => r.to === relativeFile),
+                oldPath: status.renamed.find((r: any) => r.to === relativeFile)?.from,
+              };
+            }
+
             throw new SecureError(
               diffValidation.error!,
               ErrorType.VALIDATION_ERROR,
@@ -159,7 +181,7 @@ export class GitService {
             );
           }
 
-          const fileSummary = diffSummary.files.find((f: any) => f.file === validatedFile);
+          const fileSummary = diffSummary.files.find((f: any) => f.file === relativeFile);
 
           return {
             file: validatedFile,
