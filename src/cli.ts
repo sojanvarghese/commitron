@@ -301,6 +301,13 @@ program
     console.log('  • Files in secrets/, keys/, credentials/ directories');
     console.log('  • Files containing API keys, passwords, or tokens\n');
 
+    console.log(chalk.yellow('Common Warning Types:'));
+    console.log('  • Potential sensitive data detected');
+    console.log('  • Sensitive file pattern detected');
+    console.log('  • Potential secrets detected in comments');
+    console.log('  • Sensitive file type');
+    console.log('  • Located in sensitive directory\n');
+
     console.log(
       chalk.gray('For more information, visit: https://github.com/sojanvarghese/commit-x#privacy')
     );
