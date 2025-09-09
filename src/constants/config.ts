@@ -1,4 +1,4 @@
-import { CommitConfig } from '../types/common.js';
+import type { CommitConfig } from '../types/common.js';
 
 export const CONFIG_DIR = '.commit-x';
 export const CONFIG_FILE = 'config.json';
