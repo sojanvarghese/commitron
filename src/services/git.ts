@@ -12,6 +12,8 @@ import {
 import { ErrorType } from '../types/error-handler.js';
 import { ErrorHandler, withErrorHandling, withRetry, SecureError } from '../utils/error-handler.js';
 import { GIT_TIMEOUT_MS, GIT_RETRY_ATTEMPTS, GIT_RETRY_DELAY_MS } from '../constants/git.js';
+import { ERROR_MESSAGES } from '../constants/messages.js';
+import { UI_CONSTANTS } from '../constants/ui.js';
 
 export class GitService {
   private readonly git: SimpleGit;
@@ -217,7 +219,7 @@ export class GitService {
 
         if (status.staged.length === 0) {
           throw new SecureError(
-            'No staged changes found. Please stage your changes with "git add" first.',
+            ERROR_MESSAGES.NO_STAGED_CHANGES,
             ErrorType.GIT_ERROR,
             { operation: 'getStagedDiff' },
             true
@@ -268,7 +270,7 @@ export class GitService {
     const diffs = await this.getStagedDiff();
 
     if (diffs.length === 0) {
-      return 'No staged changes found.';
+      return ERROR_MESSAGES.NO_STAGED_CHANGES_DIFF;
     }
 
     let summary = `Changes summary:\n`;
@@ -282,11 +284,7 @@ export class GitService {
 
     summary += `Files:\n`;
     diffs.forEach((diff) => {
-      let status = '';
-      if (diff.isNew) status = '[NEW]';
-      else if (diff.isDeleted) status = '[DELETED]';
-      else if (diff.isRenamed) status = '[RENAMED]';
-      else status = '[MODIFIED]';
+      const status = this.getFileStatus(diff);
 
       summary += `- ${status} ${diff.file} (+${diff.additions}/-${diff.deletions})\n`;
     });
@@ -309,7 +307,7 @@ export class GitService {
         const validatedFiles = this.validateFilePaths(files);
         if (validatedFiles.length === 0) {
           throw new SecureError(
-            'No valid files to stage',
+            ERROR_MESSAGES.NO_VALID_FILES,
             ErrorType.VALIDATION_ERROR,
             { operation: 'stageFiles' },
             true
@@ -405,5 +403,18 @@ export class GitService {
       name: repoName,
       branch: status.current,
     };
+  };
+
+  private readonly getFileStatus = (diff: GitDiff): string => {
+    switch (true) {
+      case diff.isNew:
+        return UI_CONSTANTS.FILE_STATUS.NEW;
+      case diff.isDeleted:
+        return UI_CONSTANTS.FILE_STATUS.DELETED;
+      case diff.isRenamed:
+        return UI_CONSTANTS.FILE_STATUS.RENAMED;
+      default:
+        return UI_CONSTANTS.FILE_STATUS.MODIFIED;
+    }
   };
 }
