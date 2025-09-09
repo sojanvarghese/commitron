@@ -194,30 +194,32 @@ export class AIService {
 
   private readonly getDefaultPrompt = (): string => {
     let prompt =
-      'You are an expert at analyzing code changes and generating precise commit messages.\n\n';
+      'You are an expert commit message generator for software development. Your task is to analyze code changes and craft a single, concise commit message (8-20 words) that clearly describes the functional changes.\n\n' +
 
-    prompt += 'REQUIREMENTS:\n';
-    prompt += '- Generate 8-20 words describing WHAT WAS IMPLEMENTED or BUILT\n';
-    prompt += '- Focus on FUNCTIONALITY and FEATURES, not line counts or generic changes\n';
-    prompt += '- Use past tense verbs: "Implemented", "Added", "Created", "Built", "Integrated"\n';
-    prompt += '- NO prefixes like "feat:", "fix:", "chore:"\n';
-    prompt += '- Describe the PURPOSE and VALUE of what was added\n\n';
+      '## COMMIT MESSAGE REQUIREMENTS: (INSTRUCTIONS)\n' +
+      '- **Focus on "WHAT WAS BUILT/IMPLEMENTED":** Describe the new functionality, features, or significant changes introduced.\n' +
+      '- **Use Past Tense Verbs:** Start with action verbs like "Implemented," "Added," "Created," "Refactored," "Fixed," "Optimized."\n' +
+      '- **Highlight Purpose/Value:** Explain *why* the change was made and its benefit to the system or users.\n' +
+      '- **Be Specific, Not Generic:** Avoid vague statements; detail the exact functionality.\n' +
+      '- **No Prefixes:** Do NOT include conventional prefixes like "feat:", "fix:", "chore:".\n' +
+      '- **Length Constraint:** Keep the message between 8 and 20 words.\n\n' +
 
-    prompt += 'GOOD EXAMPLES (focus on what was implemented):\n';
-    prompt += '- "Implemented Zod validation schemas for type-safe configuration management"\n';
-    prompt += '- "Added ts-pattern utilities for error handling and file type detection"\n';
-    prompt += '- "Created centralized validation system with comprehensive type definitions"\n';
-    prompt += '- "Integrated tsup build configuration for optimized bundle generation"\n';
-    prompt += '- "Built pattern matching utilities for commit message classification"\n\n';
+      '## GOOD EXAMPLES:\n' +
+      '- "Implemented Zod validation schemas for type-safe configuration management"\n' +
+      '- "Added ts-pattern utilities for error handling and file type detection"\n' +
+      '- "Created centralized validation system with comprehensive type definitions"\n' +
+      '- "Integrated tsup build configuration for optimized bundle generation"\n' +
+      '- "Built pattern matching utilities for commit message classification"\n\n' +
 
-    prompt += 'BAD EXAMPLES (avoid these patterns):\n';
-    prompt += '- "Major updates to validation.ts (+279/-0 lines)" (just line counts)\n';
-    prompt += '- "Updated files for better functionality" (vague)\n';
-    prompt += '- "Improved code quality and maintainability" (meaningless)\n';
-    prompt += '- "Enhanced data processing capabilities" (no specifics)\n';
-    prompt += '- "Added 15 new functions and 3 classes" (focuses on quantity, not purpose)\n\n';
+      '## BAD EXAMPLES (Avoid these common pitfalls):\n' +
+      '- "Major updates to validation.ts (+279/-0 lines)" (Focuses on metrics, not functionality.)\n' +
+      '- "Updated files for better functionality" (Too vague; lacks specifics.)\n' +
+      '- "Improved code quality and maintainability" (Generic and not descriptive of concrete changes.)\n' +
+      '- "Enhanced data processing capabilities" (Lacks details on *how* or *what* was enhanced.)\n' +
+      '- "Added 15 new functions and 3 classes" (Focuses on quantity rather than purpose or impact.)\n\n' +
 
-    prompt += 'ANALYZE the code and describe WHAT FUNCTIONALITY WAS IMPLEMENTED.\n';
+      '## OUTPUT:\n' +
+      '--- ANALYZE THE PROVIDED CODE CHANGES AND GENERATE THE OPTIMIZED COMMIT MESSAGE BELOW ---';
 
     return prompt;
   };
