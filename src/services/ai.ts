@@ -82,7 +82,7 @@ export class AIService {
               model: config.model ?? AI_DEFAULT_MODEL,
             });
 
-            const prompt = this.buildEnhancedPrompt(validatedDiffs);
+            const prompt = this.buildJsonPrompt(validatedDiffs);
 
             if (prompt.length > DEFAULT_LIMITS.maxApiRequestSize) {
               throw new SecureError(
@@ -159,7 +159,7 @@ export class AIService {
               model: config.model ?? AI_DEFAULT_MODEL,
             });
 
-            const prompt = this.buildBatchPrompt(validatedDiffs);
+            const prompt = this.buildJsonPrompt(validatedDiffs);
 
             if (prompt.length > DEFAULT_LIMITS.maxApiRequestSize) {
               throw new SecureError(
@@ -188,118 +188,94 @@ export class AIService {
     );
   };
 
-  private readonly getMaxLengthForStyle = (): number => {
-    return 96; // Standard length for descriptive commit messages
-  };
+  private readonly buildJsonPrompt = (diffs: GitDiff[]): string => {
+    const promptData = {
+      role: 'expert commit message generator for software development',
+      task: 'analyze code changes and craft a single, concise commit message (4-20 words) that clearly describes the functional changes',
+      requirements: {
+        focus:
+          'WHAT WAS BUILT/IMPLEMENTED - Describe the new functionality, features, or significant changes introduced',
+        tense:
+          'Use Past Tense Verbs - Start with action verbs like "Implemented," "Added," "Created," "Refactored," "Fixed," "Optimized"',
+        purpose:
+          'Highlight Purpose/Value - Explain why the change was made and its benefit to the system or users',
+        specificity:
+          'Be Specific, Not Generic - Avoid vague statements; detail the exact functionality',
+        prefixes:
+          'No Prefixes - Do NOT include conventional prefixes like "feat:", "fix:", "chore:"',
+        length: 'Length Constraint - Keep the message between 4 and 20 words',
+      },
+      examples: {
+        good: [
+          {
+            message: 'Implemented Zod validation schemas for type-safe configuration management',
+            reason: 'Describes specific functionality and its purpose clearly',
+          },
+          {
+            message: 'Added ts-pattern utilities for error handling and file type detection',
+            reason: 'Specific about what was added and its functional purpose',
+          },
+          {
+            message: 'Created centralized validation system with comprehensive type definitions',
+            reason: 'Explains the system architecture and its comprehensive nature',
+          },
+          {
+            message: 'Integrated tsup build configuration for optimized bundle generation',
+            reason: 'Clear about the integration purpose and optimization benefit',
+          },
+          {
+            message: 'Built pattern matching utilities for commit message classification',
+            reason: 'Specific about the utility type and its classification purpose',
+          },
+        ],
+        bad: [
+          {
+            message: 'Major updates to validation.ts (+279/-0 lines)',
+            reason: 'Focuses on metrics, not functionality',
+          },
+          {
+            message: 'Updated files for better functionality',
+            reason: 'Too vague; lacks specifics',
+          },
+          {
+            message: 'Improved code quality and maintainability',
+            reason: 'Generic and not descriptive of concrete changes',
+          },
+          {
+            message: 'Enhanced data processing capabilities',
+            reason: 'Lacks details on how or what was enhanced',
+          },
+          {
+            message: 'Added 15 new functions and 3 classes',
+            reason: 'Focuses on quantity rather than purpose or impact',
+          },
+        ],
+      },
+      files: diffs.map((diff, index) => ({
+        id: index + 1,
+        name: diff.file,
+        status: diff.isNew
+          ? 'new file created'
+          : diff.isDeleted
+            ? 'file deleted'
+            : diff.isRenamed
+              ? 'file renamed'
+              : 'modified',
+        changes: diff.changes?.substring(0, 3000) || '',
+        truncated: diff.changes && diff.changes.length > 3000,
+        additions: diff.additions,
+        deletions: diff.deletions,
+      })),
+      output: {
+        format: 'json',
+        structure:
+          diffs.length === 1
+            ? { suggestions: 'Array of objects with message, description, confidence' }
+            : { files: 'Object with filename as key, containing message, description, confidence' },
+      },
+    };
 
-  private readonly getDefaultPrompt = (): string => {
-    let prompt =
-      'You are an expert commit message generator for software development. Your task is to analyze code changes and craft a single, concise commit message (4-20 words) that clearly describes the functional changes.\n\n' +
-
-      '## COMMIT MESSAGE REQUIREMENTS: (INSTRUCTIONS)\n' +
-      '- **Focus on "WHAT WAS BUILT/IMPLEMENTED":** Describe the new functionality, features, or significant changes introduced.\n' +
-      '- **Use Past Tense Verbs:** Start with action verbs like "Implemented," "Added," "Created," "Refactored," "Fixed," "Optimized."\n' +
-      '- **Highlight Purpose/Value:** Explain *why* the change was made and its benefit to the system or users.\n' +
-      '- **Be Specific, Not Generic:** Avoid vague statements; detail the exact functionality.\n' +
-      '- **No Prefixes:** Do NOT include conventional prefixes like "feat:", "fix:", "chore:".\n' +
-      '- **Length Constraint:** Keep the message between 4 and 20 words.\n\n' +
-
-      '## GOOD EXAMPLES:\n' +
-      '- "Implemented Zod validation schemas for type-safe configuration management"\n' +
-      '- "Added ts-pattern utilities for error handling and file type detection"\n' +
-      '- "Created centralized validation system with comprehensive type definitions"\n' +
-      '- "Integrated tsup build configuration for optimized bundle generation"\n' +
-      '- "Built pattern matching utilities for commit message classification"\n\n' +
-
-      '## BAD EXAMPLES (Avoid these common pitfalls):\n' +
-      '- "Major updates to validation.ts (+279/-0 lines)" (Focuses on metrics, not functionality.)\n' +
-      '- "Updated files for better functionality" (Too vague; lacks specifics.)\n' +
-      '- "Improved code quality and maintainability" (Generic and not descriptive of concrete changes.)\n' +
-      '- "Enhanced data processing capabilities" (Lacks details on *how* or *what* was enhanced.)\n' +
-      '- "Added 15 new functions and 3 classes" (Focuses on quantity rather than purpose or impact.)\n\n' +
-
-      '## OUTPUT:\n' +
-      '--- ANALYZE THE PROVIDED CODE CHANGES AND GENERATE THE OPTIMIZED COMMIT MESSAGE BELOW ---';
-
-    return prompt;
-  };
-
-  private readonly buildEnhancedPrompt = (diffs: GitDiff[]): string => {
-    let prompt = this.getDefaultPrompt();
-
-    prompt += `\n\nFILE ANALYSIS:\n`;
-
-    // Show the actual diff content for precise analysis
-    diffs.forEach((diff, _index) => {
-      let status = 'Modified';
-      if (diff.isNew) status = 'New file created';
-      else if (diff.isDeleted) status = 'File deleted';
-      else if (diff.isRenamed) status = 'File renamed';
-
-      prompt += `\nFile: ${diff.file}\n`;
-      prompt += `Status: ${status}\n`;
-
-      if (diff.changes?.trim()) {
-        // Show the actual diff content for better analysis
-        const diffPreview = diff.changes.substring(0, 3000);
-        prompt += `\nCode implementation:\n${diffPreview}\n`;
-        if (diff.changes.length > 3000) {
-          prompt += '... (code truncated)\n';
-        }
-      }
-    });
-
-    prompt += '\nBased on the CODE IMPLEMENTATION shown above:\n';
-    prompt +=
-      '1. Identify WHAT FUNCTIONALITY was implemented (what features, systems, or capabilities were built)\n';
-    prompt += '2. Generate a descriptive 8-20 word message focusing on WHAT WAS IMPLEMENTED\n';
-    prompt +=
-      '3. Emphasize the PURPOSE and VALUE of the implementation, not just technical details\n';
-    prompt +=
-      '\nReturn as JSON: {"suggestions": [{"message": "...", "description": "...", "confidence": 0.95}]}\n';
-
-    return prompt;
-  };
-
-  private readonly buildBatchPrompt = (diffs: GitDiff[]): string => {
-    let prompt = this.getDefaultPrompt();
-
-    prompt += `\n\nBATCH ANALYSIS - Generate individual commit messages for each file:\n`;
-    prompt += `You are analyzing ${diffs.length} files with changes. For EACH file, generate a specific commit message.\n\n`;
-
-    // Show the actual diff content for precise analysis
-    diffs.forEach((diff, index) => {
-      let status = 'Modified';
-      if (diff.isNew) status = 'New file created';
-      else if (diff.isDeleted) status = 'File deleted';
-      else if (diff.isRenamed) status = 'File renamed';
-
-      prompt += `\n=== FILE ${index + 1}: ${diff.file} ===\n`;
-      prompt += `Status: ${status}\n`;
-
-      if (diff.changes?.trim()) {
-        // Show the actual diff content for better analysis
-        const diffPreview = diff.changes.substring(0, 2000); // Smaller per-file limit for batch
-        prompt += `\nCode implementation:\n${diffPreview}\n`;
-        if (diff.changes.length > 2000) {
-          prompt += '... (code truncated)\n';
-        }
-      }
-    });
-
-    prompt +=
-      '\n\nFOR EACH FILE ABOVE, generate a specific commit message that describes WHAT WAS IMPLEMENTED in that file.\n';
-    prompt += 'Return as JSON with this EXACT structure:\n';
-    prompt += '{\n';
-    prompt += '  "files": {\n';
-    diffs.forEach((diff, index) => {
-      const comma = index === diffs.length - 1 ? '' : ',';
-      prompt += `    "${diff.file}": {"message": "...", "description": "...", "confidence": 0.95}${comma}\n`;
-    });
-    prompt += '  }\n';
-    prompt += '}\n';
-
-    return prompt;
+    return JSON.stringify(promptData, null, 2);
   };
 
   private readonly parseBatchResponse = (
@@ -325,7 +301,10 @@ export class AIService {
               description: fileResult.description || '',
               type: fileResult.type || '',
               scope: fileResult.scope || '',
-              confidence: fileResult.confidence || 0.8,
+              confidence:
+                typeof fileResult.confidence === 'number'
+                  ? fileResult.confidence
+                  : parseFloat(fileResult.confidence) || 0.8,
             };
             results[diff.file] = this.validateAndImprove([suggestion]);
           } else {
@@ -429,7 +408,10 @@ export class AIService {
           description: suggestion.description ?? '',
           type: suggestion.type ?? '',
           scope: suggestion.scope ?? '',
-          confidence: suggestion.confidence ?? 0.8,
+          confidence:
+            typeof suggestion.confidence === 'number'
+              ? suggestion.confidence
+              : parseFloat(suggestion.confidence) || 0.8,
         }));
       }
     } catch {
