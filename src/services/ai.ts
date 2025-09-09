@@ -389,7 +389,7 @@ export class AIService {
 
     return {
       prompt: JSON.stringify(promptData, null, 2),
-      sanitizedDiffs
+      sanitizedDiffs,
     };
   };
 
@@ -403,13 +403,10 @@ export class AIService {
     try {
       const jsonMatch = response.match(COMMIT_MESSAGE_PATTERNS.JSON_PATTERN);
       if (!jsonMatch) {
-        console.warn('🔍 DEBUG: No JSON pattern found in AI response');
-        console.warn('🔍 DEBUG: Response preview:', response.substring(0, 200) + '...');
         throw new Error(ERROR_MESSAGES.JSON_NOT_FOUND);
       }
 
       const parsed = JSON.parse(jsonMatch[0]);
-      console.warn('🔍 DEBUG: Parsed AI response:', JSON.stringify(parsed, null, 2));
 
       // Handle different response formats
       if (parsed.files && typeof parsed.files === 'object') {
