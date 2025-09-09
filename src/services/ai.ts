@@ -194,7 +194,7 @@ export class AIService {
 
   private readonly getDefaultPrompt = (): string => {
     let prompt =
-      'You are an expert commit message generator for software development. Your task is to analyze code changes and craft a single, concise commit message (8-20 words) that clearly describes the functional changes.\n\n' +
+      'You are an expert commit message generator for software development. Your task is to analyze code changes and craft a single, concise commit message (4-20 words) that clearly describes the functional changes.\n\n' +
 
       '## COMMIT MESSAGE REQUIREMENTS: (INSTRUCTIONS)\n' +
       '- **Focus on "WHAT WAS BUILT/IMPLEMENTED":** Describe the new functionality, features, or significant changes introduced.\n' +
@@ -202,7 +202,7 @@ export class AIService {
       '- **Highlight Purpose/Value:** Explain *why* the change was made and its benefit to the system or users.\n' +
       '- **Be Specific, Not Generic:** Avoid vague statements; detail the exact functionality.\n' +
       '- **No Prefixes:** Do NOT include conventional prefixes like "feat:", "fix:", "chore:".\n' +
-      '- **Length Constraint:** Keep the message between 8 and 20 words.\n\n' +
+      '- **Length Constraint:** Keep the message between 4 and 20 words.\n\n' +
 
       '## GOOD EXAMPLES:\n' +
       '- "Implemented Zod validation schemas for type-safe configuration management"\n' +
