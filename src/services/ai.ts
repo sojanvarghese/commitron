@@ -12,6 +12,14 @@ import {
   AI_DEFAULT_MODEL,
   AI_MAX_SUGGESTIONS,
 } from '../constants/ai.js';
+import { ERROR_MESSAGES, COMMIT_MESSAGES } from '../constants/messages.js';
+import { UI_CONSTANTS, COMMIT_MESSAGE_PATTERNS } from '../constants/ui.js';
+import {
+  sanitizeGitDiff,
+  shouldSkipFileForAI,
+  createPrivacyReport,
+  type SanitizedDiff,
+} from '../utils/data-sanitization.js';
 
 export class AIService {
   private readonly genAI: GoogleGenerativeAI;
@@ -26,7 +34,7 @@ export class AIService {
 
     if (!apiKey) {
       throw new SecureError(
-        'Gemini API key not found. Please set GEMINI_API_KEY environment variable or configure it with "commit-x config set apiKey YOUR_API_KEY"',
+        ERROR_MESSAGES.API_KEY_NOT_FOUND,
         ErrorType.CONFIG_ERROR,
         { operation: 'AIService.constructor' },
         true
@@ -44,16 +52,26 @@ export class AIService {
           async () => {
             if (!diffs || diffs.length === 0) {
               throw new SecureError(
-                'No diffs provided for commit message generation',
+                ERROR_MESSAGES.NO_DIFFS_PROVIDED,
                 ErrorType.VALIDATION_ERROR,
                 { operation: 'generateCommitMessage' },
                 true
               );
             }
 
-            // Validate and filter diffs using Zod
+            // Filter out sensitive files and validate diffs
             const validatedDiffs: GitDiff[] = [];
+            const skippedFiles: string[] = [];
+
             for (const diff of diffs) {
+              // Check if file should be skipped for privacy reasons
+              const skipCheck = shouldSkipFileForAI(diff.file, diff.changes || '');
+              if (skipCheck.skip) {
+                console.warn(`⚠️  Skipping ${diff.file}: ${skipCheck.reason}`);
+                skippedFiles.push(diff.file);
+                continue;
+              }
+
               const diffResult = GitDiffSchema.safeParse(diff);
               if (diffResult.success) {
                 // Additional validation for diff content size
@@ -68,9 +86,16 @@ export class AIService {
               }
             }
 
+            // Log privacy summary
+            if (skippedFiles.length > 0) {
+              console.warn(
+                `🔒 Privacy: Skipped ${skippedFiles.length} sensitive files from AI processing`
+              );
+            }
+
             if (validatedDiffs.length === 0) {
               throw new SecureError(
-                'No valid diffs found for commit message generation',
+                ERROR_MESSAGES.NO_VALID_DIFFS,
                 ErrorType.VALIDATION_ERROR,
                 { operation: 'generateCommitMessage' },
                 true
@@ -86,7 +111,7 @@ export class AIService {
 
             if (prompt.length > DEFAULT_LIMITS.maxApiRequestSize) {
               throw new SecureError(
-                `Prompt size ${prompt.length} exceeds limit of ${DEFAULT_LIMITS.maxApiRequestSize} characters`,
+                `${ERROR_MESSAGES.PROMPT_SIZE_EXCEEDED} ${DEFAULT_LIMITS.maxApiRequestSize} characters`,
                 ErrorType.VALIDATION_ERROR,
                 { operation: 'generateCommitMessage' },
                 true
@@ -121,16 +146,26 @@ export class AIService {
           async () => {
             if (!diffs || diffs.length === 0) {
               throw new SecureError(
-                'No diffs provided for batch commit message generation',
+                ERROR_MESSAGES.NO_DIFFS_BATCH,
                 ErrorType.VALIDATION_ERROR,
                 { operation: 'generateBatchCommitMessages' },
                 true
               );
             }
 
-            // Validate and filter diffs using Zod
+            // Filter out sensitive files and validate diffs
             const validatedDiffs: GitDiff[] = [];
+            const skippedFiles: string[] = [];
+
             for (const diff of diffs) {
+              // Check if file should be skipped for privacy reasons
+              const skipCheck = shouldSkipFileForAI(diff.file, diff.changes || '');
+              if (skipCheck.skip) {
+                console.warn(`⚠️  Skipping ${diff.file}: ${skipCheck.reason}`);
+                skippedFiles.push(diff.file);
+                continue;
+              }
+
               const diffResult = GitDiffSchema.safeParse(diff);
               if (diffResult.success) {
                 // Additional validation for diff content size
@@ -145,9 +180,16 @@ export class AIService {
               }
             }
 
+            // Log privacy summary
+            if (skippedFiles.length > 0) {
+              console.warn(
+                `🔒 Privacy: Skipped ${skippedFiles.length} sensitive files from AI processing`
+              );
+            }
+
             if (validatedDiffs.length === 0) {
               throw new SecureError(
-                'No valid diffs found for batch commit message generation',
+                ERROR_MESSAGES.NO_VALID_DIFFS_BATCH,
                 ErrorType.VALIDATION_ERROR,
                 { operation: 'generateBatchCommitMessages' },
                 true
@@ -188,7 +230,29 @@ export class AIService {
     );
   };
 
-  private readonly buildJsonPrompt = (diffs: GitDiff[]): string => {
+  private readonly buildJsonPrompt = (
+    diffs: GitDiff[],
+    baseDir: string = process.cwd()
+  ): string => {
+    // Sanitize all diffs before sending to AI
+    const sanitizedDiffs = diffs.map((diff) => sanitizeGitDiff(diff, baseDir));
+
+    // Create privacy report
+    const privacyReport = createPrivacyReport(sanitizedDiffs);
+
+    // Log privacy warnings if any
+    if (privacyReport.sanitizedFiles > 0) {
+      console.warn(
+        `⚠️  Privacy Notice: ${privacyReport.sanitizedFiles} files were sanitized before sending to AI`
+      );
+      if (privacyReport.warnings.length > 0) {
+        console.warn('   Warnings:', privacyReport.warnings.slice(0, 3).join(', '));
+        if (privacyReport.warnings.length > 3) {
+          console.warn(`   ... and ${privacyReport.warnings.length - 3} more warnings`);
+        }
+      }
+    }
+
     const promptData = {
       role: 'expert commit message generator for software development',
       task: 'analyze code changes and craft a single, concise commit message (4-20 words) that clearly describes the functional changes',
@@ -251,7 +315,7 @@ export class AIService {
           },
         ],
       },
-      files: diffs.map((diff, index) => ({
+      files: sanitizedDiffs.map((diff, index) => ({
         id: index + 1,
         name: diff.file,
         status: diff.isNew
@@ -261,17 +325,61 @@ export class AIService {
             : diff.isRenamed
               ? 'file renamed'
               : 'modified',
-        changes: diff.changes?.substring(0, 3000) || '',
-        truncated: diff.changes && diff.changes.length > 3000,
+        changes: diff.changes?.substring(0, UI_CONSTANTS.DIFF_CONTENT_TRUNCATE_LIMIT) || '',
+        truncated: diff.changes && diff.changes.length > UI_CONSTANTS.DIFF_CONTENT_TRUNCATE_LIMIT,
         additions: diff.additions,
         deletions: diff.deletions,
+        sanitized: diff.sanitized,
       })),
       output: {
         format: 'json',
         structure:
           diffs.length === 1
-            ? { suggestions: 'Array of objects with message, description, confidence' }
-            : { files: 'Object with filename as key, containing message, description, confidence' },
+            ? {
+                suggestions: [
+                  {
+                    message: 'string (4-20 words)',
+                    confidence: 'number (0-1)',
+                  },
+                ],
+              }
+            : {
+                files: {
+                  filename1: {
+                    message: 'string (4-20 words)',
+                    confidence: 'number (0-1)',
+                  },
+                  filename2: {
+                    message: 'string (4-20 words)',
+                    confidence: 'number (0-1)',
+                  },
+                },
+              },
+        example:
+          diffs.length === 1
+            ? {
+                suggestions: [
+                  {
+                    message: 'Implemented user authentication system',
+                    description: 'Added login and registration functionality',
+                    confidence: 0.9,
+                  },
+                ],
+              }
+            : {
+                files: {
+                  'auth.ts': {
+                    message: 'Implemented user authentication system',
+                    description: 'Added login and registration functionality',
+                    confidence: 0.9,
+                  },
+                  'user.ts': {
+                    message: 'Added user profile management features',
+                    description: 'Created user data models and validation',
+                    confidence: 0.8,
+                  },
+                },
+              },
       },
     };
 
@@ -285,14 +393,16 @@ export class AIService {
     const results: { [filename: string]: CommitSuggestion[] } = {};
 
     try {
-      const jsonMatch = response.match(/\{[\s\S]*\}/);
+      const jsonMatch = response.match(COMMIT_MESSAGE_PATTERNS.JSON_PATTERN);
       if (!jsonMatch) {
-        throw new Error('No JSON found in response');
+        throw new Error(ERROR_MESSAGES.JSON_NOT_FOUND);
       }
 
       const parsed = JSON.parse(jsonMatch[0]);
 
+      // Handle different response formats
       if (parsed.files && typeof parsed.files === 'object') {
+        // Batch format: { files: { filename: { message, description, confidence } } }
         for (const diff of diffs) {
           const fileResult = parsed.files[diff.file];
           if (fileResult && fileResult.message) {
@@ -304,7 +414,7 @@ export class AIService {
               confidence:
                 typeof fileResult.confidence === 'number'
                   ? fileResult.confidence
-                  : parseFloat(fileResult.confidence) || 0.8,
+                  : parseFloat(fileResult.confidence) || UI_CONSTANTS.CONFIDENCE_DEFAULT,
             };
             results[diff.file] = this.validateAndImprove([suggestion]);
           } else {
@@ -313,23 +423,53 @@ export class AIService {
               {
                 message: this.generateFallbackMessage(diff),
                 description: 'Generated fallback commit message',
-                confidence: 0.3,
+                confidence: UI_CONSTANTS.CONFIDENCE_FALLBACK,
               },
             ];
           }
         }
+      } else if (parsed.suggestions && Array.isArray(parsed.suggestions)) {
+        // Single file format: { suggestions: [{ message, description, confidence }] }
+        // Apply the same suggestion to all files
+        const suggestions = parsed.suggestions.map((suggestion: any) => ({
+          message: suggestion.message || '',
+          description: suggestion.description || '',
+          type: suggestion.type || '',
+          scope: suggestion.scope || '',
+          confidence:
+            typeof suggestion.confidence === 'number'
+              ? suggestion.confidence
+              : parseFloat(suggestion.confidence) || UI_CONSTANTS.CONFIDENCE_DEFAULT,
+        }));
+
+        for (const diff of diffs) {
+          results[diff.file] = this.validateAndImprove(suggestions);
+        }
       } else {
-        throw new Error('Invalid batch response format');
+        // Try to extract any commit messages from the response text
+        const textSuggestions = this.parseTextResponse(response);
+        for (const diff of diffs) {
+          results[diff.file] =
+            textSuggestions.length > 0
+              ? textSuggestions
+              : [
+                  {
+                    message: this.generateFallbackMessage(diff),
+                    description: 'Generated fallback commit message',
+                    confidence: UI_CONSTANTS.CONFIDENCE_FALLBACK,
+                  },
+                ];
+        }
       }
     } catch (error) {
-      console.warn('Failed to parse batch JSON response, using fallbacks:', error);
+      console.warn(ERROR_MESSAGES.FAILED_PARSE_BATCH_JSON, error);
       // Generate fallback messages for all files
       for (const diff of diffs) {
         results[diff.file] = [
           {
             message: this.generateFallbackMessage(diff),
             description: 'Generated fallback commit message due to parsing error',
-            confidence: 0.3,
+            confidence: UI_CONSTANTS.CONFIDENCE_FALLBACK,
           },
         ];
       }
@@ -362,22 +502,25 @@ export class AIService {
       if (result.success) {
         let improvedMessage = result.data.message.trim();
 
-        // Validate word count (7-21 words) - reject messages that are too short/long
+        // Validate word count - reject messages that are too short/long
         const wordCount = improvedMessage.split(/\s+/).length;
         let confidence = result.data.confidence;
 
-        if (wordCount < 7) {
+        if (wordCount < UI_CONSTANTS.MIN_WORD_COUNT) {
           // Don't add filler words - mark as low confidence instead
-          confidence = Math.max(0.3, confidence - 0.4);
-        } else if (wordCount > 25) {
-          // Truncate to exactly 21 words without adding filler
+          confidence = Math.max(
+            UI_CONSTANTS.CONFIDENCE_MIN,
+            confidence - UI_CONSTANTS.CONFIDENCE_DECREASE
+          );
+        } else if (wordCount > UI_CONSTANTS.MAX_WORD_COUNT) {
+          // Truncate to exactly max words without adding filler
           const words = improvedMessage.split(/\s+/);
-          improvedMessage = words.slice(0, 25).join(' ');
+          improvedMessage = words.slice(0, UI_CONSTANTS.MAX_WORD_COUNT).join(' ');
           confidence = Math.max(0.6, confidence - 0.1);
         }
 
-        if (improvedMessage.length > 120) {
-          improvedMessage = `${improvedMessage.substring(0, 120)}...`;
+        if (improvedMessage.length > UI_CONSTANTS.MESSAGE_MAX_LENGTH) {
+          improvedMessage = `${improvedMessage.substring(0, UI_CONSTANTS.MESSAGE_MAX_LENGTH)}...`;
         }
 
         validatedSuggestions.push({
@@ -395,9 +538,9 @@ export class AIService {
 
   private readonly parseResponse = (response: string): CommitSuggestion[] => {
     try {
-      const jsonMatch = response.match(/\{[\s\S]*\}/);
+      const jsonMatch = response.match(COMMIT_MESSAGE_PATTERNS.JSON_PATTERN);
       if (!jsonMatch) {
-        throw new Error('No JSON found in response');
+        throw new Error(ERROR_MESSAGES.JSON_NOT_FOUND);
       }
 
       const parsed = JSON.parse(jsonMatch[0]);
@@ -427,16 +570,14 @@ export class AIService {
 
     for (const line of lines) {
       if (
-        line.match(/^\d+\./) ||
-        line.includes('feat:') ||
-        line.includes('fix:') ||
-        line.includes('chore:')
+        line.match(COMMIT_MESSAGE_PATTERNS.NUMBERED_PATTERN) ||
+        COMMIT_MESSAGE_PATTERNS.AVOID_PREFIXES.some((prefix: string) => line.includes(prefix))
       ) {
-        const message = line.replace(/^\d+\.\s*/, '').trim();
+        const message = line.replace(COMMIT_MESSAGE_PATTERNS.NUMBERED_PATTERN, '').trim();
         if (message && message.length > 5) {
           suggestions.push({
             message,
-            confidence: 0.8,
+            confidence: UI_CONSTANTS.CONFIDENCE_DEFAULT,
           });
         }
       }
@@ -444,9 +585,9 @@ export class AIService {
 
     if (suggestions.length === 0) {
       suggestions.push({
-        message: 'Implement code changes',
-        description: 'Generated fallback commit message for code implementation',
-        confidence: 0.3,
+        message: COMMIT_MESSAGES.FALLBACK_IMPLEMENT,
+        description: COMMIT_MESSAGES.FALLBACK_DESCRIPTION,
+        confidence: UI_CONSTANTS.CONFIDENCE_FALLBACK,
       });
     }
 
