@@ -112,6 +112,82 @@ export class AIService {
     );
   };
 
+  generateBatchCommitMessages = async (
+    diffs: GitDiff[]
+  ): Promise<{ [filename: string]: CommitSuggestion[] }> => {
+    return withRetry(
+      async () => {
+        return withErrorHandling(
+          async () => {
+            if (!diffs || diffs.length === 0) {
+              throw new SecureError(
+                'No diffs provided for batch commit message generation',
+                ErrorType.VALIDATION_ERROR,
+                { operation: 'generateBatchCommitMessages' },
+                true
+              );
+            }
+
+            // Validate and filter diffs using Zod
+            const validatedDiffs: GitDiff[] = [];
+            for (const diff of diffs) {
+              const diffResult = GitDiffSchema.safeParse(diff);
+              if (diffResult.success) {
+                // Additional validation for diff content size
+                const contentResult = DiffContentSchema.safeParse(diff.changes);
+                if (contentResult.success) {
+                  validatedDiffs.push(diffResult.data);
+                } else {
+                  console.warn(`Skipping diff for ${diff.file}: content too large`);
+                }
+              } else {
+                console.warn(`Skipping invalid diff for ${diff.file}:`, diffResult.error.issues);
+              }
+            }
+
+            if (validatedDiffs.length === 0) {
+              throw new SecureError(
+                'No valid diffs found for batch commit message generation',
+                ErrorType.VALIDATION_ERROR,
+                { operation: 'generateBatchCommitMessages' },
+                true
+              );
+            }
+
+            const config = this.config.getConfig();
+            const model = this.genAI.getGenerativeModel({
+              model: config.model ?? AI_DEFAULT_MODEL,
+            });
+
+            const prompt = this.buildBatchPrompt(validatedDiffs);
+
+            if (prompt.length > DEFAULT_LIMITS.maxApiRequestSize) {
+              throw new SecureError(
+                `Prompt size ${prompt.length} exceeds limit of ${DEFAULT_LIMITS.maxApiRequestSize} characters`,
+                ErrorType.VALIDATION_ERROR,
+                { operation: 'generateBatchCommitMessages' },
+                true
+              );
+            }
+
+            const { response } = await withTimeout(
+              model.generateContent(prompt),
+              DEFAULT_LIMITS.timeoutMs
+            );
+            const text = response.text();
+            const batchResults = this.parseBatchResponse(text, validatedDiffs);
+
+            return batchResults;
+          },
+          { operation: 'generateBatchCommitMessages' }
+        );
+      },
+      AI_RETRY_ATTEMPTS,
+      AI_RETRY_DELAY_MS,
+      { operation: 'generateBatchCommitMessages' }
+    );
+  };
+
   private readonly getMaxLengthForStyle = (): number => {
     return 96; // Standard length for descriptive commit messages
   };
@@ -181,6 +257,120 @@ export class AIService {
       '\nReturn as JSON: {"suggestions": [{"message": "...", "description": "...", "confidence": 0.95}]}\n';
 
     return prompt;
+  };
+
+  private readonly buildBatchPrompt = (diffs: GitDiff[]): string => {
+    let prompt = this.getDefaultPrompt();
+
+    prompt += `\n\nBATCH ANALYSIS - Generate individual commit messages for each file:\n`;
+    prompt += `You are analyzing ${diffs.length} files with changes. For EACH file, generate a specific commit message.\n\n`;
+
+    // Show the actual diff content for precise analysis
+    diffs.forEach((diff, index) => {
+      let status = 'Modified';
+      if (diff.isNew) status = 'New file created';
+      else if (diff.isDeleted) status = 'File deleted';
+      else if (diff.isRenamed) status = 'File renamed';
+
+      prompt += `\n=== FILE ${index + 1}: ${diff.file} ===\n`;
+      prompt += `Status: ${status}\n`;
+
+      if (diff.changes?.trim()) {
+        // Show the actual diff content for better analysis
+        const diffPreview = diff.changes.substring(0, 2000); // Smaller per-file limit for batch
+        prompt += `\nCode implementation:\n${diffPreview}\n`;
+        if (diff.changes.length > 2000) {
+          prompt += '... (code truncated)\n';
+        }
+      }
+    });
+
+    prompt +=
+      '\n\nFOR EACH FILE ABOVE, generate a specific commit message that describes WHAT WAS IMPLEMENTED in that file.\n';
+    prompt += 'Return as JSON with this EXACT structure:\n';
+    prompt += '{\n';
+    prompt += '  "files": {\n';
+    diffs.forEach((diff, index) => {
+      const comma = index === diffs.length - 1 ? '' : ',';
+      prompt += `    "${diff.file}": {"message": "...", "description": "...", "confidence": 0.95}${comma}\n`;
+    });
+    prompt += '  }\n';
+    prompt += '}\n';
+
+    return prompt;
+  };
+
+  private readonly parseBatchResponse = (
+    response: string,
+    diffs: GitDiff[]
+  ): { [filename: string]: CommitSuggestion[] } => {
+    const results: { [filename: string]: CommitSuggestion[] } = {};
+
+    try {
+      const jsonMatch = response.match(/\{[\s\S]*\}/);
+      if (!jsonMatch) {
+        throw new Error('No JSON found in response');
+      }
+
+      const parsed = JSON.parse(jsonMatch[0]);
+
+      if (parsed.files && typeof parsed.files === 'object') {
+        for (const diff of diffs) {
+          const fileResult = parsed.files[diff.file];
+          if (fileResult && fileResult.message) {
+            const suggestion: CommitSuggestion = {
+              message: fileResult.message,
+              description: fileResult.description || '',
+              type: fileResult.type || '',
+              scope: fileResult.scope || '',
+              confidence: fileResult.confidence || 0.8,
+            };
+            results[diff.file] = this.validateAndImprove([suggestion]);
+          } else {
+            // Fallback if specific file not found in response
+            results[diff.file] = [
+              {
+                message: this.generateFallbackMessage(diff),
+                description: 'Generated fallback commit message',
+                confidence: 0.3,
+              },
+            ];
+          }
+        }
+      } else {
+        throw new Error('Invalid batch response format');
+      }
+    } catch (error) {
+      console.warn('Failed to parse batch JSON response, using fallbacks:', error);
+      // Generate fallback messages for all files
+      for (const diff of diffs) {
+        results[diff.file] = [
+          {
+            message: this.generateFallbackMessage(diff),
+            description: 'Generated fallback commit message due to parsing error',
+            confidence: 0.3,
+          },
+        ];
+      }
+    }
+
+    return results;
+  };
+
+  private readonly generateFallbackMessage = (diff: GitDiff): string => {
+    const fileName = diff.file.split('/').pop() ?? diff.file;
+
+    if (diff.isNew) {
+      return `Created new ${fileName} file with initial implementation`;
+    } else if (diff.isDeleted) {
+      return `Removed ${fileName} file as it is no longer needed`;
+    } else if (diff.additions > diff.deletions * 2) {
+      return `Added new functionality to ${fileName} file`;
+    } else if (diff.deletions > diff.additions * 2) {
+      return `Removed unused code from ${fileName} file`;
+    } else {
+      return `Updated ${fileName} file with code improvements`;
+    }
   };
 
   private readonly validateAndImprove = (suggestions: CommitSuggestion[]): CommitSuggestion[] => {
