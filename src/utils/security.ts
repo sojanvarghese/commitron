@@ -1,7 +1,7 @@
 import * as path from 'path';
 import * as fs from 'fs';
 import { promisify } from 'util';
-import { ValidationResult } from '../types/security.js';
+import type { ValidationResult } from '../types/security.js';
 import { ALLOWED_CONFIG_KEYS, ALLOWED_MODELS, DEFAULT_LIMITS, SUSPICIOUS_COMMIT_PATTERNS, SUSPICIOUS_PATTERNS } from '../constants/security.js';
 
 const stat = promisify(fs.stat);
