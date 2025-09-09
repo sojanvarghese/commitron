@@ -107,7 +107,7 @@ export class AIService {
               model: config.model ?? AI_DEFAULT_MODEL,
             });
 
-            const prompt = this.buildJsonPrompt(validatedDiffs);
+            const { prompt } = this.buildJsonPrompt(validatedDiffs);
 
             if (prompt.length > DEFAULT_LIMITS.maxApiRequestSize) {
               throw new SecureError(
@@ -201,7 +201,7 @@ export class AIService {
               model: config.model ?? AI_DEFAULT_MODEL,
             });
 
-            const prompt = this.buildJsonPrompt(validatedDiffs);
+            const { prompt, sanitizedDiffs } = this.buildJsonPrompt(validatedDiffs);
 
             if (prompt.length > DEFAULT_LIMITS.maxApiRequestSize) {
               throw new SecureError(
@@ -217,7 +217,7 @@ export class AIService {
               DEFAULT_LIMITS.timeoutMs
             );
             const text = response.text();
-            const batchResults = this.parseBatchResponse(text, validatedDiffs);
+            const batchResults = this.parseBatchResponse(text, validatedDiffs, sanitizedDiffs);
 
             return batchResults;
           },
@@ -233,7 +233,7 @@ export class AIService {
   private readonly buildJsonPrompt = (
     diffs: GitDiff[],
     baseDir: string = process.cwd()
-  ): string => {
+  ): { prompt: string; sanitizedDiffs: SanitizedDiff[] } => {
     // Sanitize all diffs before sending to AI
     const sanitizedDiffs = diffs.map((diff) => sanitizeGitDiff(diff, baseDir));
 
@@ -242,13 +242,17 @@ export class AIService {
 
     // Log privacy warnings if any
     if (privacyReport.sanitizedFiles > 0) {
+      console.warn(''); // Add newline before privacy notice
       console.warn(
         `⚠️  Privacy Notice: ${privacyReport.sanitizedFiles} files were sanitized before sending to AI`
       );
       if (privacyReport.warnings.length > 0) {
-        console.warn('   Warnings:', privacyReport.warnings.slice(0, 3).join(', '));
-        if (privacyReport.warnings.length > 3) {
-          console.warn(`   ... and ${privacyReport.warnings.length - 3} more warnings`);
+        console.warn('   Warnings:');
+        privacyReport.warnings.slice(0, 5).forEach((warning, index) => {
+          console.warn(`   ${index + 1}. ${warning}`);
+        });
+        if (privacyReport.warnings.length > 5) {
+          console.warn(`   ... and ${privacyReport.warnings.length - 5} more warnings`);
         }
       }
     }
@@ -383,28 +387,37 @@ export class AIService {
       },
     };
 
-    return JSON.stringify(promptData, null, 2);
+    return {
+      prompt: JSON.stringify(promptData, null, 2),
+      sanitizedDiffs
+    };
   };
 
   private readonly parseBatchResponse = (
     response: string,
-    diffs: GitDiff[]
+    diffs: GitDiff[],
+    sanitizedDiffs: SanitizedDiff[]
   ): { [filename: string]: CommitSuggestion[] } => {
     const results: { [filename: string]: CommitSuggestion[] } = {};
 
     try {
       const jsonMatch = response.match(COMMIT_MESSAGE_PATTERNS.JSON_PATTERN);
       if (!jsonMatch) {
+        console.warn('🔍 DEBUG: No JSON pattern found in AI response');
+        console.warn('🔍 DEBUG: Response preview:', response.substring(0, 200) + '...');
         throw new Error(ERROR_MESSAGES.JSON_NOT_FOUND);
       }
 
       const parsed = JSON.parse(jsonMatch[0]);
+      console.warn('🔍 DEBUG: Parsed AI response:', JSON.stringify(parsed, null, 2));
 
       // Handle different response formats
       if (parsed.files && typeof parsed.files === 'object') {
         // Batch format: { files: { filename: { message, description, confidence } } }
-        for (const diff of diffs) {
-          const fileResult = parsed.files[diff.file];
+        for (let i = 0; i < diffs.length; i++) {
+          const diff = diffs[i];
+          const sanitizedDiff = sanitizedDiffs[i];
+          const fileResult = parsed.files[sanitizedDiff.file];
           if (fileResult && fileResult.message) {
             const suggestion: CommitSuggestion = {
               message: fileResult.message,
