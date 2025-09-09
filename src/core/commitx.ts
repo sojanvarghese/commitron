@@ -47,15 +47,22 @@ export class CommitX {
       }
 
       let processedCount = 0;
-      for (const file of unstagedFiles) {
-        try {
-          const success = await this.commitIndividualFile(file, options);
-          if (success) {
-            processedCount++;
+
+      // Optimize for multiple files: use batch processing when beneficial
+      if (unstagedFiles.length > 1 && !options.dryRun) {
+        processedCount = await this.commitFilesBatch(unstagedFiles, options);
+      } else {
+        // Fall back to individual processing for dry runs or single files
+        for (const file of unstagedFiles) {
+          try {
+            const success = await this.commitIndividualFile(file, options);
+            if (success) {
+              processedCount++;
+            }
+          } catch (error) {
+            const fileName = file.split('/').pop() || file;
+            console.error(chalk.red(`Failed to process ${fileName}: ${error}`));
           }
-        } catch (error) {
-          const fileName = file.split('/').pop() || file;
-          console.error(chalk.red(`Failed to process ${fileName}: ${error}`));
         }
       }
 
@@ -127,6 +134,140 @@ export class CommitX {
 
     // Force exit to prevent delay from lingering HTTP connections
     setTimeout(() => process.exit(0), 100);
+  };
+
+  private readonly commitFilesBatch = async (
+    files: string[],
+    options: CommitOptions
+  ): Promise<number> => {
+    let processedCount = 0;
+    const spinner = ora('Analyzing files for batch processing...').start();
+
+    try {
+      // Collect all file diffs and categorize them
+      const aiEligibleFiles: { file: string; diff: GitDiff }[] = [];
+      const summaryFiles: { file: string; diff: GitDiff }[] = [];
+      const skippedFiles: string[] = [];
+
+      for (const file of files) {
+        try {
+          const fileName = file.split('/').pop() || file;
+          const fileDiff = await this.gitService.getFileDiff(file, false);
+          const totalChanges = fileDiff.additions + fileDiff.deletions;
+
+          // Skip truly empty files
+          if (
+            totalChanges === 0 &&
+            (!fileDiff.changes || fileDiff.changes.trim() === '') &&
+            !fileDiff.isDeleted
+          ) {
+            if (fileDiff.isNew) {
+              console.log(chalk.yellow(`  Skipping empty new file: ${fileName}`));
+            } else {
+              console.log(chalk.yellow(`  Skipping file with no changes: ${fileName}`));
+            }
+            skippedFiles.push(file);
+            continue;
+          }
+
+          // Categorize files
+          if (this.shouldUseSummaryMessage(file, totalChanges)) {
+            summaryFiles.push({ file, diff: fileDiff });
+          } else {
+            aiEligibleFiles.push({ file, diff: fileDiff });
+          }
+        } catch (error) {
+          const fileName = file.split('/').pop() || file;
+          console.error(chalk.red(`  Failed to analyze ${fileName}: ${error}`));
+          skippedFiles.push(file);
+        }
+      }
+
+      spinner.succeed(
+        `Analyzed ${files.length} files: ${aiEligibleFiles.length} for AI processing, ${summaryFiles.length} for summary messages`
+      );
+
+      // Process files requiring AI-generated messages in batch
+      let aiCommitMessages: { [filename: string]: string } = {};
+      if (aiEligibleFiles.length > 0) {
+        const aiSpinner = ora(
+          `Generating commit messages for ${aiEligibleFiles.length} files...`
+        ).start();
+        try {
+          const aiDiffs = aiEligibleFiles.map((item) => item.diff);
+          const batchResults = await this.getAIService().generateBatchCommitMessages(aiDiffs);
+
+          // Extract the first (best) commit message for each file
+          for (const { file } of aiEligibleFiles) {
+            const suggestions = batchResults[file];
+            aiCommitMessages[file] =
+              suggestions?.[0]?.message ??
+              this.generateFallbackCommitMessage(
+                file,
+                aiEligibleFiles.find((item) => item.file === file)!.diff
+              );
+          }
+          aiSpinner.succeed(`Generated ${Object.keys(aiCommitMessages).length} AI commit messages`);
+        } catch (error) {
+          aiSpinner.fail('AI generation failed, using fallback messages');
+          console.warn(chalk.yellow('Using fallback messages due to AI error:'), error);
+
+          // Generate fallback messages for all AI-eligible files
+          for (const { file, diff } of aiEligibleFiles) {
+            aiCommitMessages[file] = this.generateFallbackCommitMessage(file, diff);
+          }
+        }
+      }
+
+      // Process all files (staging and committing)
+      const commitSpinner = ora('Committing files...').start();
+
+      // Process AI-eligible files
+      for (const { file, diff } of aiEligibleFiles) {
+        try {
+          await this.gitService.stageFile(file);
+          const commitMessage = aiCommitMessages[file];
+          await this.gitService.commit(commitMessage);
+
+          const fileName = file.split('/').pop() || file;
+          console.log(chalk.green(`✅ ${fileName}: ${commitMessage}`));
+          processedCount++;
+        } catch (error) {
+          const fileName = file.split('/').pop() || file;
+          console.error(chalk.red(`  Failed to commit ${fileName}: ${error}`));
+        }
+      }
+
+      // Process summary files
+      for (const { file, diff } of summaryFiles) {
+        try {
+          await this.gitService.stageFile(file);
+          const commitMessage = this.generateSummaryCommitMessage(file, diff);
+          await this.gitService.commit(commitMessage);
+
+          const fileName = file.split('/').pop() || file;
+          console.log(chalk.green(`✅ ${fileName}: ${commitMessage}`));
+          processedCount++;
+        } catch (error) {
+          const fileName = file.split('/').pop() || file;
+          console.error(chalk.red(`  Failed to commit ${fileName}: ${error}`));
+        }
+      }
+
+      commitSpinner.succeed(`Committed ${processedCount} files successfully`);
+
+      if (skippedFiles.length > 0) {
+        console.log(
+          chalk.yellow(`Skipped ${skippedFiles.length} files (empty or failed analysis)`)
+        );
+      }
+
+      return processedCount;
+    } catch (error) {
+      spinner.fail('Batch processing failed');
+      console.error(chalk.red(`Batch processing error: ${error}`));
+      return 0;
+    }
   };
 
   private readonly commitIndividualFile = async (
