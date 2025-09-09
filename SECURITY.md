@@ -7,12 +7,14 @@ CommitX implements comprehensive security measures to protect user data and prev
 ## Data Privacy & Protection
 
 ### Data Sent to AI Service
+
 - **File paths**: Sanitized to remove usernames and sensitive path segments
 - **Code changes**: Limited to 3000 characters per file, with sensitive content redacted
 - **File metadata**: Addition/deletion counts and file status only
 - **Total request size**: Capped at 100KB
 
 ### Data NOT Sent to AI Service
+
 - API keys or authentication tokens
 - Personal information (names, emails, phone numbers)
 - System information (OS details, hardware info)
@@ -20,6 +22,7 @@ CommitX implements comprehensive security measures to protect user data and prev
 - Configuration data (user settings, preferences)
 
 ### Automatic Privacy Protections
+
 - **Sensitive file filtering**: Automatically skips `.env`, `.key`, `.pem`, `.p12`, `.pfx`, `.p8` files
 - **Directory protection**: Skips files in `secrets/`, `keys/`, `credentials/` directories
 - **Content redaction**: Automatically detects and redacts potential secrets, API keys, passwords, and tokens
@@ -28,6 +31,7 @@ CommitX implements comprehensive security measures to protect user data and prev
 ## Security Features
 
 ### Input Validation & Sanitization
+
 - Comprehensive input validation for all user inputs
 - File path sanitization to prevent path traversal attacks
 - Configuration key and value validation with strict type checking
@@ -35,12 +39,14 @@ CommitX implements comprehensive security measures to protect user data and prev
 - API key format validation
 
 ### Path Traversal Protection
+
 - Path sanitization using `path.resolve()` and validation
 - Directory traversal detection with pattern matching
 - Base directory validation to ensure paths stay within repository
 - Secure file path validation in Git service
 
 ### Secure API Key Handling
+
 - Environment variables prioritized over config file storage
 - API keys never stored in configuration files
 - API key format validation with proper error handling
@@ -48,6 +54,7 @@ CommitX implements comprehensive security measures to protect user data and prev
 - Proper file permissions (0o600) for config files
 
 ### Resource Limits & Timeouts
+
 - File size limits (10MB default)
 - Diff content size limits (50KB default)
 - API request size limits (100KB default)
@@ -55,6 +62,7 @@ CommitX implements comprehensive security measures to protect user data and prev
 - Memory management for large files
 
 ### Error Handling
+
 - SecureError class with proper error categorization
 - Error recovery mechanisms with retry logic
 - Error sanitization to prevent information leakage
@@ -64,20 +72,23 @@ CommitX implements comprehensive security measures to protect user data and prev
 ## Security Configuration
 
 ### Resource Limits
+
 ```typescript
 const DEFAULT_LIMITS: ResourceLimits = {
-  maxFileSize: 10 * 1024 * 1024,    // 10MB
-  maxDiffSize: 50000,                // 50KB
-  maxApiRequestSize: 100000,         // 100KB
-  timeoutMs: 30000                   // 30 seconds
+  maxFileSize: 10 * 1024 * 1024, // 10MB
+  maxDiffSize: 50000, // 50KB
+  maxApiRequestSize: 100000, // 100KB
+  timeoutMs: 30000, // 30 seconds
 };
 ```
 
 ### File Permissions
+
 - **Config directory**: `0o700` (owner read/write/execute only)
 - **Config file**: `0o600` (owner read/write only)
 
 ### Input Validation Rules
+
 - **File paths**: Must be within repository directory
 - **API keys**: 10-200 characters, alphanumeric with hyphens/underscores
 - **Commit messages**: 1-200 characters, no malicious patterns
@@ -86,6 +97,7 @@ const DEFAULT_LIMITS: ResourceLimits = {
 ## Privacy Command
 
 Use `yarn cx privacy` to view detailed information about:
+
 - What data is sent to the AI service
 - Privacy protections in place
 - Sensitive file types that are automatically skipped
@@ -117,6 +129,7 @@ Never store API keys in configuration files or commit them to version control.
 ## Security Testing
 
 The application includes built-in security testing for:
+
 - Input validation and sanitization
 - Path traversal protection
 - Resource limit enforcement
@@ -135,6 +148,7 @@ If you discover a security vulnerability, please:
 ## Compliance
 
 This security implementation helps ensure compliance with:
+
 - Data privacy regulations
 - Security best practices
 - Enterprise security requirements
@@ -142,6 +156,6 @@ This security implementation helps ensure compliance with:
 
 ---
 
-**Last Updated**: December 2024  
-**Version**: 1.0.0  
+**Last Updated**: December 2024
+**Version**: 1.0.0
 **Status**: ✅ Security features implemented and tested
