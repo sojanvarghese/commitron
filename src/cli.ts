@@ -18,6 +18,20 @@ const packageJson = JSON.parse(readFileSync(join(__dirname, '../package.json'), 
 
 const program = new Command();
 
+// Helper function to parse configuration values
+const parseConfigValue = (value: string): any => {
+  const lowerValue = value.toLowerCase();
+
+  switch (lowerValue) {
+    case 'true':
+      return true;
+    case 'false':
+      return false;
+    default:
+      return !isNaN(Number(value)) ? Number(value) : value;
+  }
+};
+
 program
   .name('commit-x')
   .description(gradient.rainbow('🚀 AI-powered Git commit assistant'))
@@ -149,10 +163,7 @@ configCmd
         const config = ConfigManager.getInstance();
 
         // Parse boolean values
-        let parsedValue: any = value;
-        if (value.toLowerCase() === 'true') parsedValue = true;
-        else if (value.toLowerCase() === 'false') parsedValue = false;
-        else if (!isNaN(Number(value))) parsedValue = Number(value);
+        const parsedValue = parseConfigValue(value);
 
         await config.set(key as keyof CommitConfig, parsedValue);
         console.log(chalk.green(`✅ Set ${key} = ${parsedValue}`));
@@ -260,6 +271,41 @@ program
     }
   });
 
+// Privacy command
+program
+  .command('privacy')
+  .description('Show privacy settings and data handling information')
+  .action((): void => {
+    console.log(chalk.blue('🔒 CommitX Privacy Information:\n'));
+
+    console.log(chalk.yellow('Data Sent to AI:'));
+    console.log('  • File paths (sanitized to remove usernames)');
+    console.log('  • Code changes (up to 3000 characters per file)');
+    console.log('  • File metadata (additions/deletions counts)');
+    console.log('  • File status (new/modified/deleted/renamed)\n');
+    console.log(chalk.yellow('Data NOT Sent to AI:'));
+    console.log('  • API keys or authentication tokens');
+    console.log('  • Personal information (names, emails)');
+    console.log('  • System information (OS, hardware)');
+    console.log('  • Repository metadata (URLs, branch names)\n');
+
+    console.log(chalk.yellow('Privacy Protections:'));
+    console.log('  • Sensitive files are automatically skipped');
+    console.log('  • File paths are sanitized to remove usernames');
+    console.log('  • Potential secrets are redacted from content');
+    console.log('  • Content is limited to 3000 characters per file');
+    console.log('  • Total request size is capped at 100KB\n');
+
+    console.log(chalk.yellow('Sensitive File Types (Auto-skipped):'));
+    console.log('  • .env, .key, .pem, .p12, .pfx, .p8 files');
+    console.log('  • Files in secrets/, keys/, credentials/ directories');
+    console.log('  • Files containing API keys, passwords, or tokens\n');
+
+    console.log(
+      chalk.gray('For more information, visit: https://github.com/sojanvarghese/commit-x#privacy')
+    );
+  });
+
 // Help command with examples
 program
   .command('help-examples')
@@ -289,6 +335,7 @@ program
     console.log('  yarn config                    # View configuration');
     console.log('  yarn config:set                # Set configuration values');
     console.log('  yarn config:reset              # Reset configuration');
+    console.log('  yarn privacy                   # Show privacy information');
   });
 
 // Default action for commit when no subcommand is provided
