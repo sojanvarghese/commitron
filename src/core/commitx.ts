@@ -7,6 +7,7 @@ import { GitService } from '../services/git.js';
 import { AIService } from '../services/ai.js';
 import type { CommitOptions, CommitSuggestion, GitDiff } from '../types/common.js';
 import { getFileTypeFromExtension } from '../schemas/validation.js';
+import { LARGE_FILE_THRESHOLD } from '../constants/ai.js';
 
 export class CommitX {
   private readonly gitService: GitService;
@@ -355,11 +356,22 @@ export class CommitX {
         (name) =>
           name.includes('yarn.lock') ||
           name.includes('package-lock.json') ||
-          name.includes('pnpm-lock.yaml'),
-        () => true // Lock files
+          name.includes('pnpm-lock.yaml') ||
+          name.includes('composer.lock') ||
+          name.includes('Gemfile.lock') ||
+          name.includes('Podfile.lock') ||
+          name.includes('go.sum') ||
+          name.includes('Cargo.lock') ||
+          name.includes('Pipfile.lock'),
+        () => true // Lock files from various package managers
       )
       .when(
-        (name) => name.includes('.generated.') || name.includes('.auto.') || name.includes('.min.'),
+        (name) =>
+          name.includes('.generated.') ||
+          name.includes('.auto.') ||
+          name.includes('.min.') ||
+          name.includes('.bundle.') ||
+          name.includes('.chunk.'),
         () => true // Generated files
       )
       .when(
@@ -367,11 +379,40 @@ export class CommitX {
           name.includes('/dist/') ||
           name.includes('/build/') ||
           name.includes('/.next/') ||
-          name.includes('/coverage/'),
-        () => true // Build artifacts
+          name.includes('/coverage/') ||
+          name.includes('/out/') ||
+          name.includes('/target/') ||
+          name.includes('/node_modules/') ||
+          name.includes('/vendor/') ||
+          name.includes('/.nuxt/') ||
+          name.includes('/.vuepress/') ||
+          name.includes('/.docusaurus/'),
+        () => true // Build artifacts and dependencies
       )
       .when(
-        () => totalChanges > 250,
+        (name) =>
+          name.includes('package.json') ||
+          name.includes('composer.json') ||
+          name.includes('Gemfile') ||
+          name.includes('Podfile') ||
+          name.includes('go.mod') ||
+          name.includes('Cargo.toml') ||
+          name.includes('Pipfile') ||
+          name.includes('build.gradle') ||
+          name.includes('pom.xml') ||
+          name.includes('requirements.txt') ||
+          name.includes('pyproject.toml'),
+        () => totalChanges > 20 // Package/dependency files with significant changes
+      )
+      .when(
+        (name) =>
+          name.toLowerCase().includes('changelog') ||
+          name.toLowerCase().includes('history') ||
+          name.toLowerCase().includes('release-notes'),
+        () => true // Changelog and release files
+      )
+      .when(
+        () => totalChanges > LARGE_FILE_THRESHOLD,
         () => true // Large files
       )
       .when(
@@ -379,8 +420,13 @@ export class CommitX {
         () => true // Certain file types with many changes
       )
       .when(
-        (name) => baseName.includes('.log') || name.includes('/logs/'),
-        () => true // Log files
+        (name) =>
+          baseName.includes('.log') ||
+          name.includes('/logs/') ||
+          baseName.includes('.cache') ||
+          baseName.includes('.tmp') ||
+          baseName.includes('.temp'),
+        () => true // Log and temporary files
       )
       .when(
         () =>
@@ -388,6 +434,14 @@ export class CommitX {
           ['markdown', 'unknown'].includes(fileType) &&
           (fileName.endsWith('.md') || fileName.endsWith('.txt') || fileName.endsWith('.rst')),
         () => true // Documentation files with many changes
+      )
+      .when(
+        (name) =>
+          name.includes('.map') ||
+          name.includes('.bundle') ||
+          name.includes('.chunk') ||
+          name.includes('.vendor'),
+        () => true // Source maps and bundled files
       )
       .otherwise(() => false);
   };
@@ -413,18 +467,278 @@ export class CommitX {
       )
       .when(
         (name) => name.includes('package-lock.json'),
-        () => 'Updated package-lock.json dependencies'
+        () =>
+          match(fileDiff.additions > fileDiff.deletions * 2)
+            .with(true, () => 'Added new dependencies to package-lock.json')
+            .with(false, () =>
+              match(fileDiff.deletions > fileDiff.additions * 2)
+                .with(true, () => 'Removed dependencies from package-lock.json')
+                .with(false, () => 'Updated dependencies in package-lock.json')
+                .exhaustive()
+            )
+            .exhaustive()
       )
       .when(
         (name) => name.includes('pnpm-lock.yaml'),
-        () => 'Updated pnpm-lock.yaml dependencies'
+        () =>
+          match(fileDiff.additions > fileDiff.deletions * 2)
+            .with(true, () => 'Added new dependencies to pnpm-lock.yaml')
+            .with(false, () =>
+              match(fileDiff.deletions > fileDiff.additions * 2)
+                .with(true, () => 'Removed dependencies from pnpm-lock.yaml')
+                .with(false, () => 'Updated dependencies in pnpm-lock.yaml')
+                .exhaustive()
+            )
+            .exhaustive()
       )
       .when(
-        () => file.includes('.generated.') || file.includes('.auto.') || file.includes('.min.'),
+        (name) => name.includes('composer.lock'),
+        () =>
+          match(fileDiff.additions > fileDiff.deletions * 2)
+            .with(true, () => 'Added new dependencies to composer.lock')
+            .with(false, () =>
+              match(fileDiff.deletions > fileDiff.additions * 2)
+                .with(true, () => 'Removed dependencies from composer.lock')
+                .with(false, () => 'Updated dependencies in composer.lock')
+                .exhaustive()
+            )
+            .exhaustive()
+      )
+      .when(
+        (name) => name.includes('gemfile.lock'),
+        () =>
+          match(fileDiff.additions > fileDiff.deletions * 2)
+            .with(true, () => 'Added new gems to Gemfile.lock')
+            .with(false, () =>
+              match(fileDiff.deletions > fileDiff.additions * 2)
+                .with(true, () => 'Removed gems from Gemfile.lock')
+                .with(false, () => 'Updated gems in Gemfile.lock')
+                .exhaustive()
+            )
+            .exhaustive()
+      )
+      .when(
+        (name) => name.includes('podfile.lock'),
+        () =>
+          match(fileDiff.additions > fileDiff.deletions * 2)
+            .with(true, () => 'Added new pods to Podfile.lock')
+            .with(false, () =>
+              match(fileDiff.deletions > fileDiff.additions * 2)
+                .with(true, () => 'Removed pods from Podfile.lock')
+                .with(false, () => 'Updated pods in Podfile.lock')
+                .exhaustive()
+            )
+            .exhaustive()
+      )
+      .when(
+        (name) => name.includes('go.sum'),
+        () =>
+          match(fileDiff.additions > fileDiff.deletions * 2)
+            .with(true, () => 'Added new module checksums to go.sum')
+            .with(false, () =>
+              match(fileDiff.deletions > fileDiff.additions * 2)
+                .with(true, () => 'Removed module checksums from go.sum')
+                .with(false, () => 'Updated module checksums in go.sum')
+                .exhaustive()
+            )
+            .exhaustive()
+      )
+      .when(
+        (name) => name.includes('cargo.lock'),
+        () =>
+          match(fileDiff.additions > fileDiff.deletions * 2)
+            .with(true, () => 'Added new dependencies to Cargo.lock')
+            .with(false, () =>
+              match(fileDiff.deletions > fileDiff.additions * 2)
+                .with(true, () => 'Removed dependencies from Cargo.lock')
+                .with(false, () => 'Updated dependencies in Cargo.lock')
+                .exhaustive()
+            )
+            .exhaustive()
+      )
+      .when(
+        (name) => name.includes('pipfile.lock'),
+        () =>
+          match(fileDiff.additions > fileDiff.deletions * 2)
+            .with(true, () => 'Added new packages to Pipfile.lock')
+            .with(false, () =>
+              match(fileDiff.deletions > fileDiff.additions * 2)
+                .with(true, () => 'Removed packages from Pipfile.lock')
+                .with(false, () => 'Updated packages in Pipfile.lock')
+                .exhaustive()
+            )
+            .exhaustive()
+      )
+      .when(
+        (name) => name.includes('package.json'),
+        () =>
+          match(fileDiff.additions > fileDiff.deletions * 2)
+            .with(true, () => 'Added new dependencies to package.json')
+            .with(false, () =>
+              match(fileDiff.deletions > fileDiff.additions * 2)
+                .with(true, () => 'Removed dependencies from package.json')
+                .with(false, () => 'Updated package.json dependencies and metadata')
+                .exhaustive()
+            )
+            .exhaustive()
+      )
+      .when(
+        (name) => name.includes('composer.json'),
+        () =>
+          match(fileDiff.additions > fileDiff.deletions * 2)
+            .with(true, () => 'Added new dependencies to composer.json')
+            .with(false, () =>
+              match(fileDiff.deletions > fileDiff.additions * 2)
+                .with(true, () => 'Removed dependencies from composer.json')
+                .with(false, () => 'Updated composer.json dependencies')
+                .exhaustive()
+            )
+            .exhaustive()
+      )
+      .when(
+        (name) => name.includes('gemfile'),
+        () =>
+          match(fileDiff.additions > fileDiff.deletions * 2)
+            .with(true, () => 'Added new gems to Gemfile')
+            .with(false, () =>
+              match(fileDiff.deletions > fileDiff.additions * 2)
+                .with(true, () => 'Removed gems from Gemfile')
+                .with(false, () => 'Updated Gemfile dependencies')
+                .exhaustive()
+            )
+            .exhaustive()
+      )
+      .when(
+        (name) => name.includes('podfile'),
+        () =>
+          match(fileDiff.additions > fileDiff.deletions * 2)
+            .with(true, () => 'Added new pods to Podfile')
+            .with(false, () =>
+              match(fileDiff.deletions > fileDiff.additions * 2)
+                .with(true, () => 'Removed pods from Podfile')
+                .with(false, () => 'Updated Podfile dependencies')
+                .exhaustive()
+            )
+            .exhaustive()
+      )
+      .when(
+        (name) => name.includes('go.mod'),
+        () =>
+          match(fileDiff.additions > fileDiff.deletions * 2)
+            .with(true, () => 'Added new modules to go.mod')
+            .with(false, () =>
+              match(fileDiff.deletions > fileDiff.additions * 2)
+                .with(true, () => 'Removed modules from go.mod')
+                .with(false, () => 'Updated go.mod module dependencies')
+                .exhaustive()
+            )
+            .exhaustive()
+      )
+      .when(
+        (name) => name.includes('cargo.toml'),
+        () =>
+          match(fileDiff.additions > fileDiff.deletions * 2)
+            .with(true, () => 'Added new dependencies to Cargo.toml')
+            .with(false, () =>
+              match(fileDiff.deletions > fileDiff.additions * 2)
+                .with(true, () => 'Removed dependencies from Cargo.toml')
+                .with(false, () => 'Updated Cargo.toml dependencies')
+                .exhaustive()
+            )
+            .exhaustive()
+      )
+      .when(
+        (name) => name.includes('pipfile'),
+        () =>
+          match(fileDiff.additions > fileDiff.deletions * 2)
+            .with(true, () => 'Added new packages to Pipfile')
+            .with(false, () =>
+              match(fileDiff.deletions > fileDiff.additions * 2)
+                .with(true, () => 'Removed packages from Pipfile')
+                .with(false, () => 'Updated Pipfile dependencies')
+                .exhaustive()
+            )
+            .exhaustive()
+      )
+      .when(
+        (name) => name.includes('build.gradle'),
+        () =>
+          match(fileDiff.additions > fileDiff.deletions * 2)
+            .with(true, () => 'Added new dependencies to build.gradle')
+            .with(false, () =>
+              match(fileDiff.deletions > fileDiff.additions * 2)
+                .with(true, () => 'Removed dependencies from build.gradle')
+                .with(false, () => 'Updated build.gradle configuration')
+                .exhaustive()
+            )
+            .exhaustive()
+      )
+      .when(
+        (name) => name.includes('pom.xml'),
+        () =>
+          match(fileDiff.additions > fileDiff.deletions * 2)
+            .with(true, () => 'Added new dependencies to pom.xml')
+            .with(false, () =>
+              match(fileDiff.deletions > fileDiff.additions * 2)
+                .with(true, () => 'Removed dependencies from pom.xml')
+                .with(false, () => 'Updated pom.xml Maven configuration')
+                .exhaustive()
+            )
+            .exhaustive()
+      )
+      .when(
+        (name) => name.includes('requirements.txt'),
+        () =>
+          match(fileDiff.additions > fileDiff.deletions * 2)
+            .with(true, () => 'Added new packages to requirements.txt')
+            .with(false, () =>
+              match(fileDiff.deletions > fileDiff.additions * 2)
+                .with(true, () => 'Removed packages from requirements.txt')
+                .with(false, () => 'Updated requirements.txt Python dependencies')
+                .exhaustive()
+            )
+            .exhaustive()
+      )
+      .when(
+        (name) => name.includes('pyproject.toml'),
+        () =>
+          match(fileDiff.additions > fileDiff.deletions * 2)
+            .with(true, () => 'Added new dependencies to pyproject.toml')
+            .with(false, () =>
+              match(fileDiff.deletions > fileDiff.additions * 2)
+                .with(true, () => 'Removed dependencies from pyproject.toml')
+                .with(false, () => 'Updated pyproject.toml Python configuration')
+                .exhaustive()
+            )
+            .exhaustive()
+      )
+      .when(
+        (name) => name.toLowerCase().includes('changelog'),
+        () => 'Updated changelog with new features and fixes'
+      )
+      .when(
+        (name) => name.toLowerCase().includes('history'),
+        () => 'Updated project history documentation'
+      )
+      .when(
+        (name) => name.toLowerCase().includes('release-notes'),
+        () => 'Updated release notes documentation'
+      )
+      .when(
+        () =>
+          file.includes('.generated.') ||
+          file.includes('.auto.') ||
+          file.includes('.min.') ||
+          file.includes('.bundle.') ||
+          file.includes('.chunk.'),
         () => `Updated generated file ${fileName}`
       )
       .when(
-        () => file.includes('/dist/') || file.includes('/build/'),
+        () =>
+          file.includes('/dist/') ||
+          file.includes('/build/') ||
+          file.includes('/out/') ||
+          file.includes('/target/'),
         () => `Updated compiled ${fileName}`
       )
       .when(
@@ -432,11 +746,44 @@ export class CommitX {
         () => 'Updated Next.js build artifacts'
       )
       .when(
+        () => file.includes('/.nuxt/'),
+        () => 'Updated Nuxt.js build artifacts'
+      )
+      .when(
+        () => file.includes('/.vuepress/'),
+        () => 'Updated VuePress build artifacts'
+      )
+      .when(
+        () => file.includes('/.docusaurus/'),
+        () => 'Updated Docusaurus build artifacts'
+      )
+      .when(
         () => file.includes('/coverage/'),
         () => 'Updated code coverage reports'
       )
       .when(
-        () => totalChanges > 300,
+        () => file.includes('/node_modules/') || file.includes('/vendor/'),
+        () => 'Updated third-party dependencies'
+      )
+      .when(
+        (name) =>
+          name.includes('.map') ||
+          name.includes('.bundle') ||
+          name.includes('.chunk') ||
+          name.includes('.vendor'),
+        () => `Updated bundled ${fileName}`
+      )
+      .when(
+        (name) =>
+          name.includes('.log') ||
+          file.includes('/logs/') ||
+          name.includes('.cache') ||
+          name.includes('.tmp') ||
+          name.includes('.temp'),
+        () => `Updated ${fileName}`
+      )
+      .when(
+        () => totalChanges > LARGE_FILE_THRESHOLD,
         () => `Implemented comprehensive functionality in ${fileName}`
       )
       .when(
@@ -454,10 +801,6 @@ export class CommitX {
           (baseName.endsWith('.md') || baseName.endsWith('.txt') || baseName.endsWith('.rst')) &&
           totalChanges > 30,
         () => `Updated ${fileName} documentation`
-      )
-      .when(
-        () => baseName.includes('.log') || file.includes('/logs/'),
-        () => `Updated log file ${fileName}`
       )
       .otherwise(() => `Updated ${fileName} functionality`);
   };
