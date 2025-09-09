@@ -8,6 +8,13 @@ import { AIService } from '../services/ai.js';
 import type { CommitOptions, CommitSuggestion, GitDiff } from '../types/common.js';
 import { getFileTypeFromExtension } from '../schemas/validation.js';
 import { LARGE_FILE_THRESHOLD } from '../constants/ai.js';
+import {
+  ERROR_MESSAGES,
+  WARNING_MESSAGES,
+  SUCCESS_MESSAGES,
+  INFO_MESSAGES,
+} from '../constants/messages.js';
+import { UI_CONSTANTS, FILE_PATTERNS } from '../constants/ui.js';
 
 export class CommitX {
   private readonly gitService: GitService;
@@ -43,7 +50,7 @@ export class CommitX {
       const unstagedFiles = await this.gitService.getUnstagedFiles();
 
       if (unstagedFiles.length === 0) {
-        console.log(chalk.yellow('No changes detected. Working directory is clean.'));
+        console.log(chalk.yellow(WARNING_MESSAGES.NO_CHANGES_DETECTED));
         return;
       }
 
@@ -77,7 +84,7 @@ export class CommitX {
 
       // Force exit to prevent delay from lingering HTTP connections
       if (options.dryRun || processedCount > 0) {
-        setTimeout(() => process.exit(0), 100);
+        setTimeout(() => process.exit(0), UI_CONSTANTS.EXIT_DELAY_MS);
       }
     } catch (error) {
       console.error(chalk.red(`Error: ${error}`));
@@ -92,15 +99,15 @@ export class CommitX {
       if (status.unstaged.length > 0 || status.untracked.length > 0) {
         const shouldStage = await this.promptStageFiles(status);
         if (shouldStage) {
-          const spinner = ora('Staging files...').start();
+          const spinner = ora(UI_CONSTANTS.SPINNER_MESSAGES.STAGING).start();
           await this.gitService.stageAll();
-          spinner.succeed('Files staged successfully');
+          spinner.succeed(SUCCESS_MESSAGES.FILES_STAGED);
         } else {
-          console.log(chalk.yellow('No files staged. Aborting commit.'));
+          console.log(chalk.yellow(WARNING_MESSAGES.NO_FILES_STAGED));
           return;
         }
       } else {
-        console.log(chalk.yellow('No changes detected. Working directory is clean.'));
+        console.log(chalk.yellow(WARNING_MESSAGES.NO_CHANGES_DETECTED));
         return;
       }
     }
@@ -109,32 +116,32 @@ export class CommitX {
       options.message ?? (await this.generateCommitMessage(options.interactive));
 
     if (!commitMessage) {
-      console.log(chalk.yellow('No commit message provided. Aborting commit.'));
+      console.log(chalk.yellow(WARNING_MESSAGES.NO_COMMIT_MESSAGE));
       return;
     }
 
     if (options.dryRun) {
-      console.log(chalk.blue('Dry run - would commit with message:'));
+      console.log(chalk.blue(INFO_MESSAGES.DRY_RUN_COMMIT));
       console.log(chalk.white(`"${commitMessage}"`));
       return;
     }
 
-    const commitSpinner = ora('Creating commit...').start();
+    const commitSpinner = ora(UI_CONSTANTS.SPINNER_MESSAGES.COMMITTING).start();
     await this.gitService.commit(commitMessage);
     commitSpinner.succeed(`Committed: ${chalk.green(commitMessage)}`);
 
     if (options.push === true) {
-      const pushSpinner = ora('Pushing to remote...').start();
+      const pushSpinner = ora(UI_CONSTANTS.SPINNER_MESSAGES.PUSHING).start();
       try {
         await this.gitService.push();
-        pushSpinner.succeed('Changes pushed successfully');
+        pushSpinner.succeed(SUCCESS_MESSAGES.CHANGES_PUSHED);
       } catch (error) {
-        pushSpinner.fail(`Failed to push: ${error}`);
+        pushSpinner.fail(`${WARNING_MESSAGES.FAILED_TO_PUSH} ${error}`);
       }
     }
 
     // Force exit to prevent delay from lingering HTTP connections
-    setTimeout(() => process.exit(0), 100);
+    setTimeout(() => process.exit(0), UI_CONSTANTS.EXIT_DELAY_MS);
   };
 
   private readonly commitFilesBatch = async (
