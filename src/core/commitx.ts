@@ -8,13 +8,9 @@ import { AIService } from '../services/ai.js';
 import type { CommitOptions, CommitSuggestion, GitDiff } from '../types/common.js';
 import { getFileTypeFromExtension } from '../schemas/validation.js';
 import { LARGE_FILE_THRESHOLD } from '../constants/ai.js';
-import {
-  ERROR_MESSAGES,
-  WARNING_MESSAGES,
-  SUCCESS_MESSAGES,
-  INFO_MESSAGES,
-} from '../constants/messages.js';
-import { UI_CONSTANTS, FILE_PATTERNS } from '../constants/ui.js';
+import { WARNING_MESSAGES, SUCCESS_MESSAGES, INFO_MESSAGES } from '../constants/messages.js';
+import { UI_CONSTANTS } from '../constants/ui.js';
+import { FILE_TYPE_CONFIGS, PATTERNS } from '../constants/commitx.js';
 
 export class CommitX {
   private readonly gitService: GitService;
@@ -148,121 +144,24 @@ export class CommitX {
     files: string[],
     options: CommitOptions
   ): Promise<number> => {
-    let processedCount = 0;
     const spinner = ora('Analyzing files for batch processing...').start();
 
     try {
-      // Collect all file diffs and categorize them
-      const aiEligibleFiles: { file: string; diff: GitDiff }[] = [];
-      const summaryFiles: { file: string; diff: GitDiff }[] = [];
-      const skippedFiles: string[] = [];
-
-      for (const file of files) {
-        try {
-          const fileName = file.split('/').pop() || file;
-          const fileDiff = await this.gitService.getFileDiff(file, false);
-          const totalChanges = fileDiff.additions + fileDiff.deletions;
-
-          // Skip truly empty files
-          if (
-            totalChanges === 0 &&
-            (!fileDiff.changes || fileDiff.changes.trim() === '') &&
-            !fileDiff.isDeleted
-          ) {
-            if (fileDiff.isNew) {
-              console.log(chalk.yellow(`  Skipping empty new file: ${fileName}`));
-            } else {
-              console.log(chalk.yellow(`  Skipping file with no changes: ${fileName}`));
-            }
-            skippedFiles.push(file);
-            continue;
-          }
-
-          // Categorize files
-          if (this.shouldUseSummaryMessage(file, totalChanges)) {
-            summaryFiles.push({ file, diff: fileDiff });
-          } else {
-            aiEligibleFiles.push({ file, diff: fileDiff });
-          }
-        } catch (error) {
-          const fileName = file.split('/').pop() || file;
-          console.error(chalk.red(`  Failed to analyze ${fileName}: ${error}`));
-          skippedFiles.push(file);
-        }
-      }
+      // Analyze and categorize files
+      const { aiEligibleFiles, summaryFiles, skippedFiles } =
+        await this.analyzeFilesForBatch(files);
 
       spinner.succeed(
         `Analyzed ${files.length} files: ${aiEligibleFiles.length} for AI processing, ${summaryFiles.length} for summary messages`
       );
 
-      // Process files requiring AI-generated messages in batch
-      let aiCommitMessages: { [filename: string]: string } = {};
-      if (aiEligibleFiles.length > 0) {
-        const aiSpinner = ora(
-          `Generating commit messages for ${aiEligibleFiles.length} files...`
-        ).start();
-        try {
-          const aiDiffs = aiEligibleFiles.map((item) => item.diff);
-          const batchResults = await this.getAIService().generateBatchCommitMessages(aiDiffs);
-
-          // Extract the first (best) commit message for each file
-          for (const { file } of aiEligibleFiles) {
-            const suggestions = batchResults[file];
-            aiCommitMessages[file] =
-              suggestions?.[0]?.message ??
-              this.generateFallbackCommitMessage(
-                file,
-                aiEligibleFiles.find((item) => item.file === file)!.diff
-              );
-          }
-          aiSpinner.succeed(`Generated ${Object.keys(aiCommitMessages).length} AI commit messages`);
-        } catch (error) {
-          aiSpinner.fail('AI generation failed, using fallback messages');
-          console.warn(chalk.yellow('Using fallback messages due to AI error:'), error);
-
-          // Generate fallback messages for all AI-eligible files
-          for (const { file, diff } of aiEligibleFiles) {
-            aiCommitMessages[file] = this.generateFallbackCommitMessage(file, diff);
-          }
-        }
-      }
-
-      // Process all files (staging and committing)
-      const commitSpinner = ora('Committing files...').start();
-
-      // Process AI-eligible files
-      for (const { file, diff } of aiEligibleFiles) {
-        try {
-          await this.gitService.stageFile(file);
-          const commitMessage = aiCommitMessages[file];
-          await this.gitService.commit(commitMessage);
-
-          const fileName = file.split('/').pop() || file;
-          console.log(chalk.green(`✅ ${fileName}: ${commitMessage}`));
-          processedCount++;
-        } catch (error) {
-          const fileName = file.split('/').pop() || file;
-          console.error(chalk.red(`  Failed to commit ${fileName}: ${error}`));
-        }
-      }
-
-      // Process summary files
-      for (const { file, diff } of summaryFiles) {
-        try {
-          await this.gitService.stageFile(file);
-          const commitMessage = this.generateSummaryCommitMessage(file, diff);
-          await this.gitService.commit(commitMessage);
-
-          const fileName = file.split('/').pop() || file;
-          console.log(chalk.green(`✅ ${fileName}: ${commitMessage}`));
-          processedCount++;
-        } catch (error) {
-          const fileName = file.split('/').pop() || file;
-          console.error(chalk.red(`  Failed to commit ${fileName}: ${error}`));
-        }
-      }
-
-      commitSpinner.succeed(`Committed ${processedCount} files successfully`);
+      // Generate AI commit messages
+      const aiCommitMessages = await this.generateBatchCommitMessages(aiEligibleFiles);
+      const processedCount = await this.processBatchCommits(
+        aiEligibleFiles,
+        summaryFiles,
+        aiCommitMessages
+      );
 
       if (skippedFiles.length > 0) {
         console.log(
@@ -276,6 +175,141 @@ export class CommitX {
       console.error(chalk.red(`Batch processing error: ${error}`));
       return 0;
     }
+  };
+
+  private readonly analyzeFilesForBatch = async (files: string[]) => {
+    const aiEligibleFiles: { file: string; diff: GitDiff }[] = [];
+    const summaryFiles: { file: string; diff: GitDiff }[] = [];
+    const skippedFiles: string[] = [];
+
+    for (const file of files) {
+      try {
+        const fileName = file.split('/').pop() || file;
+        const fileDiff = await this.gitService.getFileDiff(file, false);
+        const totalChanges = fileDiff.additions + fileDiff.deletions;
+
+        // Skip truly empty files
+        if (this.shouldSkipFile(fileDiff, totalChanges)) {
+          this.logSkippedFile(fileName, fileDiff);
+          skippedFiles.push(file);
+          continue;
+        }
+
+        // Categorize files
+        if (this.shouldUseSummaryMessage(file, totalChanges)) {
+          summaryFiles.push({ file, diff: fileDiff });
+        } else {
+          aiEligibleFiles.push({ file, diff: fileDiff });
+        }
+      } catch (error) {
+        const fileName = file.split('/').pop() || file;
+        console.error(chalk.red(`  Failed to analyze ${fileName}: ${error}`));
+        skippedFiles.push(file);
+      }
+    }
+
+    return { aiEligibleFiles, summaryFiles, skippedFiles };
+  };
+
+  private readonly shouldSkipFile = (fileDiff: GitDiff, totalChanges: number): boolean => {
+    return (
+      totalChanges === 0 &&
+      (!fileDiff.changes || fileDiff.changes.trim() === '') &&
+      !fileDiff.isDeleted
+    );
+  };
+
+  private readonly logSkippedFile = (fileName: string, fileDiff: GitDiff): void => {
+    if (fileDiff.isNew) {
+      console.log(chalk.yellow(`  Skipping empty new file: ${fileName}`));
+    } else {
+      console.log(chalk.yellow(`  Skipping file with no changes: ${fileName}`));
+    }
+  };
+
+  private readonly generateBatchCommitMessages = async (
+    aiEligibleFiles: { file: string; diff: GitDiff }[]
+  ) => {
+    const aiCommitMessages: { [filename: string]: string } = {};
+
+    if (aiEligibleFiles.length === 0) {
+      return aiCommitMessages;
+    }
+
+    const aiSpinner = ora(
+      `Generating commit messages for ${aiEligibleFiles.length} files...`
+    ).start();
+
+    try {
+      const aiDiffs = aiEligibleFiles.map((item) => item.diff);
+      const batchResults = await this.getAIService().generateBatchCommitMessages(aiDiffs);
+
+      // Extract the first (best) commit message for each file
+      for (const { file } of aiEligibleFiles) {
+        const suggestions = batchResults[file];
+        aiCommitMessages[file] =
+          suggestions?.[0]?.message ??
+          this.generateFallbackCommitMessage(
+            file,
+            aiEligibleFiles.find((item) => item.file === file)!.diff
+          );
+      }
+      aiSpinner.succeed(`Generated ${Object.keys(aiCommitMessages).length} AI commit messages`);
+    } catch (error) {
+      aiSpinner.fail('AI generation failed, using fallback messages');
+      console.warn(chalk.yellow('Using fallback messages due to AI error:'), error);
+
+      // Generate fallback messages for all AI-eligible files
+      for (const { file, diff } of aiEligibleFiles) {
+        aiCommitMessages[file] = this.generateFallbackCommitMessage(file, diff);
+      }
+    }
+
+    return aiCommitMessages;
+  };
+
+  private readonly processBatchCommits = async (
+    aiEligibleFiles: { file: string; diff: GitDiff }[],
+    summaryFiles: { file: string; diff: GitDiff }[],
+    aiCommitMessages: { [filename: string]: string }
+  ): Promise<number> => {
+    const commitSpinner = ora('Committing files...').start();
+    let processedCount = 0;
+
+    // Process AI-eligible files
+    for (const { file } of aiEligibleFiles) {
+      try {
+        await this.gitService.stageFile(file);
+        const commitMessage = aiCommitMessages[file];
+        await this.gitService.commit(commitMessage);
+
+        const fileName = file.split('/').pop() || file;
+        console.log(chalk.green(`✅ ${fileName}: ${commitMessage}`));
+        processedCount++;
+      } catch (error) {
+        const fileName = file.split('/').pop() || file;
+        console.error(chalk.red(`  Failed to commit ${fileName}: ${error}`));
+      }
+    }
+
+    // Process summary files
+    for (const { file, diff } of summaryFiles) {
+      try {
+        await this.gitService.stageFile(file);
+        const commitMessage = this.generateSummaryCommitMessage(file, diff);
+        await this.gitService.commit(commitMessage);
+
+        const fileName = file.split('/').pop() || file;
+        console.log(chalk.green(`✅ ${fileName}: ${commitMessage}`));
+        processedCount++;
+      } catch (error) {
+        const fileName = file.split('/').pop() || file;
+        console.error(chalk.red(`  Failed to commit ${fileName}: ${error}`));
+      }
+    }
+
+    commitSpinner.succeed(`Committed ${processedCount} files successfully`);
+    return processedCount;
   };
 
   private readonly commitIndividualFile = async (
@@ -358,99 +392,63 @@ export class CommitX {
     const baseName = file.split('/').pop()?.toLowerCase() ?? '';
     const fileType = getFileTypeFromExtension(fileName);
 
-    return match(fileName)
-      .when(
-        (name) =>
-          name.includes('yarn.lock') ||
-          name.includes('package-lock.json') ||
-          name.includes('pnpm-lock.yaml') ||
-          name.includes('composer.lock') ||
-          name.includes('Gemfile.lock') ||
-          name.includes('Podfile.lock') ||
-          name.includes('go.sum') ||
-          name.includes('Cargo.lock') ||
-          name.includes('Pipfile.lock'),
-        () => true // Lock files from various package managers
-      )
-      .when(
-        (name) =>
-          name.includes('.generated.') ||
-          name.includes('.auto.') ||
-          name.includes('.min.') ||
-          name.includes('.bundle.') ||
-          name.includes('.chunk.'),
-        () => true // Generated files
-      )
-      .when(
-        (name) =>
-          name.includes('/dist/') ||
-          name.includes('/build/') ||
-          name.includes('/.next/') ||
-          name.includes('/coverage/') ||
-          name.includes('/out/') ||
-          name.includes('/target/') ||
-          name.includes('/node_modules/') ||
-          name.includes('/vendor/') ||
-          name.includes('/.nuxt/') ||
-          name.includes('/.vuepress/') ||
-          name.includes('/.docusaurus/'),
-        () => true // Build artifacts and dependencies
-      )
-      .when(
-        (name) =>
-          name.includes('package.json') ||
-          name.includes('composer.json') ||
-          name.includes('Gemfile') ||
-          name.includes('Podfile') ||
-          name.includes('go.mod') ||
-          name.includes('Cargo.toml') ||
-          name.includes('Pipfile') ||
-          name.includes('build.gradle') ||
-          name.includes('pom.xml') ||
-          name.includes('requirements.txt') ||
-          name.includes('pyproject.toml'),
-        () => totalChanges > 20 // Package/dependency files with significant changes
-      )
-      .when(
-        (name) =>
-          name.toLowerCase().includes('changelog') ||
-          name.toLowerCase().includes('history') ||
-          name.toLowerCase().includes('release-notes'),
-        () => true // Changelog and release files
-      )
-      .when(
-        () => totalChanges > LARGE_FILE_THRESHOLD,
-        () => true // Large files
-      )
-      .when(
-        () => totalChanges > 50 && ['json', 'xml', 'css', 'scss', 'less'].includes(fileType),
-        () => true // Certain file types with many changes
-      )
-      .when(
-        (name) =>
-          baseName.includes('.log') ||
-          name.includes('/logs/') ||
-          baseName.includes('.cache') ||
-          baseName.includes('.tmp') ||
-          baseName.includes('.temp'),
-        () => true // Log and temporary files
-      )
-      .when(
-        () =>
-          totalChanges > 30 &&
-          ['markdown', 'unknown'].includes(fileType) &&
-          (fileName.endsWith('.md') || fileName.endsWith('.txt') || fileName.endsWith('.rst')),
-        () => true // Documentation files with many changes
-      )
-      .when(
-        (name) =>
-          name.includes('.map') ||
-          name.includes('.bundle') ||
-          name.includes('.chunk') ||
-          name.includes('.vendor'),
-        () => true // Source maps and bundled files
-      )
-      .otherwise(() => false);
+    // Check for lock files (always use summary)
+    if (PATTERNS.lockFiles.some((pattern) => fileName.includes(pattern))) {
+      return true;
+    }
+
+    // Check for generated files (always use summary)
+    if (PATTERNS.generatedFiles.some((pattern) => fileName.includes(pattern))) {
+      return true;
+    }
+
+    // Check for build directories (always use summary)
+    if (PATTERNS.buildDirs.some((pattern) => fileName.includes(pattern))) {
+      return true;
+    }
+
+    // Check for changelog files (always use summary)
+    if (PATTERNS.changelogFiles.some((pattern) => fileName.toLowerCase().includes(pattern))) {
+      return true;
+    }
+
+    // Check for log and temporary files (always use summary)
+    if (
+      PATTERNS.logFiles.some((pattern) => baseName.includes(pattern) || fileName.includes(pattern))
+    ) {
+      return true;
+    }
+
+    // Check for bundle files (always use summary)
+    if (PATTERNS.bundleFiles.some((pattern) => fileName.includes(pattern))) {
+      return true;
+    }
+
+    // Check for package files with significant changes
+    if (PATTERNS.packageFiles.some((pattern) => fileName.includes(pattern)) && totalChanges > 20) {
+      return true;
+    }
+
+    // Check for large files
+    if (totalChanges > LARGE_FILE_THRESHOLD) {
+      return true;
+    }
+
+    // Check for certain file types with many changes
+    if (totalChanges > 50 && ['json', 'xml', 'css', 'scss', 'less'].includes(fileType)) {
+      return true;
+    }
+
+    // Check for documentation files with many changes
+    if (
+      totalChanges > 30 &&
+      ['markdown', 'unknown'].includes(fileType) &&
+      (fileName.endsWith('.md') || fileName.endsWith('.txt') || fileName.endsWith('.rst'))
+    ) {
+      return true;
+    }
+
+    return false;
   };
 
   private readonly generateSummaryCommitMessage = (file: string, fileDiff: GitDiff): string => {
@@ -458,358 +456,113 @@ export class CommitX {
     const baseName = fileName.toLowerCase();
     const totalChanges = fileDiff.additions + fileDiff.deletions;
 
-    return match(baseName)
-      .when(
-        (name) => name.includes('yarn.lock'),
-        () =>
-          match(fileDiff.additions > fileDiff.deletions * 2)
-            .with(true, () => 'Added new dependencies to yarn.lock')
-            .with(false, () =>
-              match(fileDiff.deletions > fileDiff.additions * 2)
-                .with(true, () => 'Removed dependencies from yarn.lock')
-                .with(false, () => 'Updated dependencies in yarn.lock')
-                .exhaustive()
-            )
-            .exhaustive()
-      )
-      .when(
-        (name) => name.includes('package-lock.json'),
-        () =>
-          match(fileDiff.additions > fileDiff.deletions * 2)
-            .with(true, () => 'Added new dependencies to package-lock.json')
-            .with(false, () =>
-              match(fileDiff.deletions > fileDiff.additions * 2)
-                .with(true, () => 'Removed dependencies from package-lock.json')
-                .with(false, () => 'Updated dependencies in package-lock.json')
-                .exhaustive()
-            )
-            .exhaustive()
-      )
-      .when(
-        (name) => name.includes('pnpm-lock.yaml'),
-        () =>
-          match(fileDiff.additions > fileDiff.deletions * 2)
-            .with(true, () => 'Added new dependencies to pnpm-lock.yaml')
-            .with(false, () =>
-              match(fileDiff.deletions > fileDiff.additions * 2)
-                .with(true, () => 'Removed dependencies from pnpm-lock.yaml')
-                .with(false, () => 'Updated dependencies in pnpm-lock.yaml')
-                .exhaustive()
-            )
-            .exhaustive()
-      )
-      .when(
-        (name) => name.includes('composer.lock'),
-        () =>
-          match(fileDiff.additions > fileDiff.deletions * 2)
-            .with(true, () => 'Added new dependencies to composer.lock')
-            .with(false, () =>
-              match(fileDiff.deletions > fileDiff.additions * 2)
-                .with(true, () => 'Removed dependencies from composer.lock')
-                .with(false, () => 'Updated dependencies in composer.lock')
-                .exhaustive()
-            )
-            .exhaustive()
-      )
-      .when(
-        (name) => name.includes('gemfile.lock'),
-        () =>
-          match(fileDiff.additions > fileDiff.deletions * 2)
-            .with(true, () => 'Added new gems to Gemfile.lock')
-            .with(false, () =>
-              match(fileDiff.deletions > fileDiff.additions * 2)
-                .with(true, () => 'Removed gems from Gemfile.lock')
-                .with(false, () => 'Updated gems in Gemfile.lock')
-                .exhaustive()
-            )
-            .exhaustive()
-      )
-      .when(
-        (name) => name.includes('podfile.lock'),
-        () =>
-          match(fileDiff.additions > fileDiff.deletions * 2)
-            .with(true, () => 'Added new pods to Podfile.lock')
-            .with(false, () =>
-              match(fileDiff.deletions > fileDiff.additions * 2)
-                .with(true, () => 'Removed pods from Podfile.lock')
-                .with(false, () => 'Updated pods in Podfile.lock')
-                .exhaustive()
-            )
-            .exhaustive()
-      )
-      .when(
-        (name) => name.includes('go.sum'),
-        () =>
-          match(fileDiff.additions > fileDiff.deletions * 2)
-            .with(true, () => 'Added new module checksums to go.sum')
-            .with(false, () =>
-              match(fileDiff.deletions > fileDiff.additions * 2)
-                .with(true, () => 'Removed module checksums from go.sum')
-                .with(false, () => 'Updated module checksums in go.sum')
-                .exhaustive()
-            )
-            .exhaustive()
-      )
-      .when(
-        (name) => name.includes('cargo.lock'),
-        () =>
-          match(fileDiff.additions > fileDiff.deletions * 2)
-            .with(true, () => 'Added new dependencies to Cargo.lock')
-            .with(false, () =>
-              match(fileDiff.deletions > fileDiff.additions * 2)
-                .with(true, () => 'Removed dependencies from Cargo.lock')
-                .with(false, () => 'Updated dependencies in Cargo.lock')
-                .exhaustive()
-            )
-            .exhaustive()
-      )
-      .when(
-        (name) => name.includes('pipfile.lock'),
-        () =>
-          match(fileDiff.additions > fileDiff.deletions * 2)
-            .with(true, () => 'Added new packages to Pipfile.lock')
-            .with(false, () =>
-              match(fileDiff.deletions > fileDiff.additions * 2)
-                .with(true, () => 'Removed packages from Pipfile.lock')
-                .with(false, () => 'Updated packages in Pipfile.lock')
-                .exhaustive()
-            )
-            .exhaustive()
-      )
-      .when(
-        (name) => name.includes('package.json'),
-        () =>
-          match(fileDiff.additions > fileDiff.deletions * 2)
-            .with(true, () => 'Added new dependencies to package.json')
-            .with(false, () =>
-              match(fileDiff.deletions > fileDiff.additions * 2)
-                .with(true, () => 'Removed dependencies from package.json')
-                .with(false, () => 'Updated package.json dependencies and metadata')
-                .exhaustive()
-            )
-            .exhaustive()
-      )
-      .when(
-        (name) => name.includes('composer.json'),
-        () =>
-          match(fileDiff.additions > fileDiff.deletions * 2)
-            .with(true, () => 'Added new dependencies to composer.json')
-            .with(false, () =>
-              match(fileDiff.deletions > fileDiff.additions * 2)
-                .with(true, () => 'Removed dependencies from composer.json')
-                .with(false, () => 'Updated composer.json dependencies')
-                .exhaustive()
-            )
-            .exhaustive()
-      )
-      .when(
-        (name) => name.includes('gemfile'),
-        () =>
-          match(fileDiff.additions > fileDiff.deletions * 2)
-            .with(true, () => 'Added new gems to Gemfile')
-            .with(false, () =>
-              match(fileDiff.deletions > fileDiff.additions * 2)
-                .with(true, () => 'Removed gems from Gemfile')
-                .with(false, () => 'Updated Gemfile dependencies')
-                .exhaustive()
-            )
-            .exhaustive()
-      )
-      .when(
-        (name) => name.includes('podfile'),
-        () =>
-          match(fileDiff.additions > fileDiff.deletions * 2)
-            .with(true, () => 'Added new pods to Podfile')
-            .with(false, () =>
-              match(fileDiff.deletions > fileDiff.additions * 2)
-                .with(true, () => 'Removed pods from Podfile')
-                .with(false, () => 'Updated Podfile dependencies')
-                .exhaustive()
-            )
-            .exhaustive()
-      )
-      .when(
-        (name) => name.includes('go.mod'),
-        () =>
-          match(fileDiff.additions > fileDiff.deletions * 2)
-            .with(true, () => 'Added new modules to go.mod')
-            .with(false, () =>
-              match(fileDiff.deletions > fileDiff.additions * 2)
-                .with(true, () => 'Removed modules from go.mod')
-                .with(false, () => 'Updated go.mod module dependencies')
-                .exhaustive()
-            )
-            .exhaustive()
-      )
-      .when(
-        (name) => name.includes('cargo.toml'),
-        () =>
-          match(fileDiff.additions > fileDiff.deletions * 2)
-            .with(true, () => 'Added new dependencies to Cargo.toml')
-            .with(false, () =>
-              match(fileDiff.deletions > fileDiff.additions * 2)
-                .with(true, () => 'Removed dependencies from Cargo.toml')
-                .with(false, () => 'Updated Cargo.toml dependencies')
-                .exhaustive()
-            )
-            .exhaustive()
-      )
-      .when(
-        (name) => name.includes('pipfile'),
-        () =>
-          match(fileDiff.additions > fileDiff.deletions * 2)
-            .with(true, () => 'Added new packages to Pipfile')
-            .with(false, () =>
-              match(fileDiff.deletions > fileDiff.additions * 2)
-                .with(true, () => 'Removed packages from Pipfile')
-                .with(false, () => 'Updated Pipfile dependencies')
-                .exhaustive()
-            )
-            .exhaustive()
-      )
-      .when(
-        (name) => name.includes('build.gradle'),
-        () =>
-          match(fileDiff.additions > fileDiff.deletions * 2)
-            .with(true, () => 'Added new dependencies to build.gradle')
-            .with(false, () =>
-              match(fileDiff.deletions > fileDiff.additions * 2)
-                .with(true, () => 'Removed dependencies from build.gradle')
-                .with(false, () => 'Updated build.gradle configuration')
-                .exhaustive()
-            )
-            .exhaustive()
-      )
-      .when(
-        (name) => name.includes('pom.xml'),
-        () =>
-          match(fileDiff.additions > fileDiff.deletions * 2)
-            .with(true, () => 'Added new dependencies to pom.xml')
-            .with(false, () =>
-              match(fileDiff.deletions > fileDiff.additions * 2)
-                .with(true, () => 'Removed dependencies from pom.xml')
-                .with(false, () => 'Updated pom.xml Maven configuration')
-                .exhaustive()
-            )
-            .exhaustive()
-      )
-      .when(
-        (name) => name.includes('requirements.txt'),
-        () =>
-          match(fileDiff.additions > fileDiff.deletions * 2)
-            .with(true, () => 'Added new packages to requirements.txt')
-            .with(false, () =>
-              match(fileDiff.deletions > fileDiff.additions * 2)
-                .with(true, () => 'Removed packages from requirements.txt')
-                .with(false, () => 'Updated requirements.txt Python dependencies')
-                .exhaustive()
-            )
-            .exhaustive()
-      )
-      .when(
-        (name) => name.includes('pyproject.toml'),
-        () =>
-          match(fileDiff.additions > fileDiff.deletions * 2)
-            .with(true, () => 'Added new dependencies to pyproject.toml')
-            .with(false, () =>
-              match(fileDiff.deletions > fileDiff.additions * 2)
-                .with(true, () => 'Removed dependencies from pyproject.toml')
-                .with(false, () => 'Updated pyproject.toml Python configuration')
-                .exhaustive()
-            )
-            .exhaustive()
-      )
-      .when(
-        (name) => name.toLowerCase().includes('changelog'),
-        () => 'Updated changelog with new features and fixes'
-      )
-      .when(
-        (name) => name.toLowerCase().includes('history'),
-        () => 'Updated project history documentation'
-      )
-      .when(
-        (name) => name.toLowerCase().includes('release-notes'),
-        () => 'Updated release notes documentation'
-      )
-      .when(
-        () =>
-          file.includes('.generated.') ||
-          file.includes('.auto.') ||
-          file.includes('.min.') ||
-          file.includes('.bundle.') ||
-          file.includes('.chunk.'),
-        () => `Updated generated file ${fileName}`
-      )
-      .when(
-        () =>
-          file.includes('/dist/') ||
-          file.includes('/build/') ||
-          file.includes('/out/') ||
-          file.includes('/target/'),
-        () => `Updated compiled ${fileName}`
-      )
-      .when(
-        () => file.includes('/.next/'),
-        () => 'Updated Next.js build artifacts'
-      )
-      .when(
-        () => file.includes('/.nuxt/'),
-        () => 'Updated Nuxt.js build artifacts'
-      )
-      .when(
-        () => file.includes('/.vuepress/'),
-        () => 'Updated VuePress build artifacts'
-      )
-      .when(
-        () => file.includes('/.docusaurus/'),
-        () => 'Updated Docusaurus build artifacts'
-      )
-      .when(
-        () => file.includes('/coverage/'),
-        () => 'Updated code coverage reports'
-      )
-      .when(
-        () => file.includes('/node_modules/') || file.includes('/vendor/'),
-        () => 'Updated third-party dependencies'
-      )
-      .when(
-        (name) =>
-          name.includes('.map') ||
-          name.includes('.bundle') ||
-          name.includes('.chunk') ||
-          name.includes('.vendor'),
-        () => `Updated bundled ${fileName}`
-      )
-      .when(
-        (name) =>
-          name.includes('.log') ||
-          file.includes('/logs/') ||
-          name.includes('.cache') ||
-          name.includes('.tmp') ||
-          name.includes('.temp'),
-        () => `Updated ${fileName}`
-      )
-      .when(
-        () => totalChanges > LARGE_FILE_THRESHOLD,
-        () => `Implemented comprehensive functionality in ${fileName}`
-      )
-      .when(
-        () => baseName.endsWith('.json') && totalChanges > 50,
-        () => `Updated ${fileName} configuration`
-      )
-      .when(
-        () =>
-          (baseName.endsWith('.css') || baseName.endsWith('.scss') || baseName.endsWith('.less')) &&
-          totalChanges > 50,
-        () => `Updated ${fileName} styles`
-      )
-      .when(
-        () =>
-          (baseName.endsWith('.md') || baseName.endsWith('.txt') || baseName.endsWith('.rst')) &&
-          totalChanges > 30,
-        () => `Updated ${fileName} documentation`
-      )
-      .otherwise(() => `Updated ${fileName} functionality`);
+    // Helper function to generate dependency change message
+    const getDependencyChangeMessage = (config: { name: string; type: string }) => {
+      const isAdding = fileDiff.additions > fileDiff.deletions * 2;
+      const isRemoving = fileDiff.deletions > fileDiff.additions * 2;
+
+      if (isAdding) return `Added new ${config.type} to ${config.name}`;
+      if (isRemoving) return `Removed ${config.type} from ${config.name}`;
+      return `Updated ${config.type} in ${config.name}`;
+    };
+
+    // Check for lock files
+    for (const [pattern, config] of Object.entries(FILE_TYPE_CONFIGS.lockFiles)) {
+      if (baseName.includes(pattern)) {
+        return getDependencyChangeMessage(config);
+      }
+    }
+
+    // Check for package files
+    for (const [pattern, config] of Object.entries(FILE_TYPE_CONFIGS.packageFiles)) {
+      if (baseName.includes(pattern)) {
+        return getDependencyChangeMessage(config);
+      }
+    }
+
+    // Check for changelog files
+    for (const [pattern, message] of Object.entries(FILE_TYPE_CONFIGS.changelogFiles)) {
+      if (baseName.includes(pattern)) {
+        return message;
+      }
+    }
+
+    // Check for build directories
+    for (const [pattern, message] of Object.entries(FILE_TYPE_CONFIGS.buildDirs)) {
+      if (file.includes(pattern)) {
+        return message;
+      }
+    }
+
+    // Check for generated files
+    if (
+      file.includes('.generated.') ||
+      file.includes('.auto.') ||
+      file.includes('.min.') ||
+      file.includes('.bundle.') ||
+      file.includes('.chunk.')
+    ) {
+      return `Updated generated file ${fileName}`;
+    }
+
+    // Check for compiled files
+    if (
+      file.includes('/dist/') ||
+      file.includes('/build/') ||
+      file.includes('/out/') ||
+      file.includes('/target/')
+    ) {
+      return `Updated compiled ${fileName}`;
+    }
+
+    // Check for bundle files
+    if (
+      baseName.includes('.map') ||
+      baseName.includes('.bundle') ||
+      baseName.includes('.chunk') ||
+      baseName.includes('.vendor')
+    ) {
+      return `Updated bundled ${fileName}`;
+    }
+
+    // Check for log and temporary files
+    if (
+      baseName.includes('.log') ||
+      file.includes('/logs/') ||
+      baseName.includes('.cache') ||
+      baseName.includes('.tmp') ||
+      baseName.includes('.temp')
+    ) {
+      return `Updated ${fileName}`;
+    }
+
+    // Check for large files
+    if (totalChanges > LARGE_FILE_THRESHOLD) {
+      return `Implemented comprehensive functionality in ${fileName}`;
+    }
+
+    // Check for configuration files
+    if (baseName.endsWith('.json') && totalChanges > 50) {
+      return `Updated ${fileName} configuration`;
+    }
+
+    // Check for style files
+    if (
+      (baseName.endsWith('.css') || baseName.endsWith('.scss') || baseName.endsWith('.less')) &&
+      totalChanges > 50
+    ) {
+      return `Updated ${fileName} styles`;
+    }
+
+    // Check for documentation files
+    if (
+      (baseName.endsWith('.md') || baseName.endsWith('.txt') || baseName.endsWith('.rst')) &&
+      totalChanges > 30
+    ) {
+      return `Updated ${fileName} documentation`;
+    }
+
+    return `Updated ${fileName} functionality`;
   };
 
   private readonly generateFallbackCommitMessage = (file: string, fileDiff: GitDiff): string => {
