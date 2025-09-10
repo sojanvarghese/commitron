@@ -9,6 +9,7 @@ import {
 } from '../constants/error-handler.js';
 import type { ErrorContext } from '../types/error-handler.js';
 import { ErrorType } from '../types/error-handler.js';
+import { ERROR_PATTERNS } from '../constants/error-handler.js';
 
 export class SecureError extends Error {
   public readonly type: ErrorType;
@@ -125,33 +126,15 @@ export class ErrorHandler {
   };
 
   private readonly detectErrorTypeFromMessage = (message: string): ErrorType => {
-    return match(message.toLowerCase())
-      .when(
-        (msg) => msg.includes('timeout') || msg.includes('timed out'),
-        () => ErrorType.TIMEOUT_ERROR
-      )
-      .when(
-        (msg) => msg.includes('validation') || msg.includes('invalid'),
-        () => ErrorType.VALIDATION_ERROR
-      )
-      .when(
-        (msg) =>
-          msg.includes('security') || msg.includes('path traversal') || msg.includes('suspicious'),
-        () => ErrorType.SECURITY_ERROR
-      )
-      .when(
-        (msg) => msg.includes('git') || msg.includes('repository'),
-        () => ErrorType.GIT_ERROR
-      )
-      .when(
-        (msg) => msg.includes('api') || msg.includes('gemini') || msg.includes('ai'),
-        () => ErrorType.AI_SERVICE_ERROR
-      )
-      .when(
-        (msg) => msg.includes('config') || msg.includes('configuration'),
-        () => ErrorType.CONFIG_ERROR
-      )
-      .otherwise(() => ErrorType.UNKNOWN_ERROR);
+    const lowerMsg = message.toLowerCase();
+
+    for (const { type, patterns } of ERROR_PATTERNS) {
+      if (patterns.some((pattern) => lowerMsg.includes(pattern))) {
+        return type;
+      }
+    }
+
+    return ErrorType.UNKNOWN_ERROR;
   };
 
   private readonly logError = (error: SecureError): void => {
