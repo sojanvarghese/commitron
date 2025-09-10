@@ -1,26 +1,30 @@
 import { GoogleGenerativeAI } from '@google/generative-ai';
-import { CommitSuggestion, CommitConfig, GitDiff } from '../types/common.js';
+import type { CommitSuggestion, GitDiff } from '../types/common.js';
 import { ConfigManager } from '../config.js';
-// No longer needed - using descriptive style only
-import {
-  validateDiffSize,
-  validateApiKey,
-  withTimeout,
-} from '../utils/security.js';
+import { GitDiffSchema, CommitSuggestionSchema, DiffContentSchema } from '../schemas/validation.js';
+import { withTimeout } from '../utils/security.js';
 import { ErrorType } from '../types/error-handler.js';
-import {
-  ErrorHandler,
-  withErrorHandling,
-  withRetry,
-  SecureError
-} from '../utils/error-handler.js';
+import { ErrorHandler, withErrorHandling, withRetry, SecureError } from '../utils/error-handler.js';
 import { DEFAULT_LIMITS } from '../constants/security.js';
-import { AI_RETRY_ATTEMPTS, AI_RETRY_DELAY_MS, AI_DEFAULT_MODEL, AI_MAX_SUGGESTIONS, AI_DIFF_PREVIEW_LENGTH } from '../constants/ai.js';
+import {
+  AI_RETRY_ATTEMPTS,
+  AI_RETRY_DELAY_MS,
+  AI_DEFAULT_MODEL,
+  AI_MAX_SUGGESTIONS,
+} from '../constants/ai.js';
+import { ERROR_MESSAGES, COMMIT_MESSAGES } from '../constants/messages.js';
+import { UI_CONSTANTS, COMMIT_MESSAGE_PATTERNS } from '../constants/ui.js';
+import {
+  sanitizeGitDiff,
+  shouldSkipFileForAI,
+  createPrivacyReport,
+  type SanitizedDiff,
+} from '../utils/data-sanitization.js';
 
 export class AIService {
-  private genAI: GoogleGenerativeAI;
-  private config: ConfigManager;
-  private errorHandler: ErrorHandler;
+  private readonly genAI: GoogleGenerativeAI;
+  private readonly config: ConfigManager;
+  private readonly errorHandler: ErrorHandler;
 
   constructor() {
     this.config = ConfigManager.getInstance();
@@ -30,207 +34,537 @@ export class AIService {
 
     if (!apiKey) {
       throw new SecureError(
-        'Gemini API key not found. Please set GEMINI_API_KEY environment variable or configure it with "commit-x config set apiKey YOUR_API_KEY"',
+        ERROR_MESSAGES.API_KEY_NOT_FOUND,
         ErrorType.CONFIG_ERROR,
         { operation: 'AIService.constructor' },
         true
       );
     }
 
-    // Validate API key format
-    const keyValidation = validateApiKey(apiKey);
-    if (!keyValidation.isValid) {
-      throw new SecureError(
-        keyValidation.error!,
-        ErrorType.VALIDATION_ERROR,
-        { operation: 'AIService.constructor' },
-        true
-      );
-    }
-
-    this.genAI = new GoogleGenerativeAI(keyValidation.sanitizedValue!);
+    // API key is already validated by ConfigManager.getApiKey()
+    this.genAI = new GoogleGenerativeAI(apiKey);
   }
-
 
   generateCommitMessage = async (diffs: GitDiff[]): Promise<CommitSuggestion[]> => {
-    return withRetry(async () => {
-      return withErrorHandling(async () => {
-        if (!diffs || diffs.length === 0) {
-          throw new SecureError(
-            'No diffs provided for commit message generation',
-            ErrorType.VALIDATION_ERROR,
-            { operation: 'generateCommitMessage' },
-            true
-          );
-        }
+    return withRetry(
+      async () => {
+        return withErrorHandling(
+          async () => {
+            if (!diffs || diffs.length === 0) {
+              throw new SecureError(
+                ERROR_MESSAGES.NO_DIFFS_PROVIDED,
+                ErrorType.VALIDATION_ERROR,
+                { operation: 'generateCommitMessage' },
+                true
+              );
+            }
 
-        // Filter out empty diffs (no changes and no content)
-        const meaningfulDiffs = diffs.filter(diff => {
-          const hasChanges = diff.additions > 0 || diff.deletions > 0;
-          const hasContent = diff.changes && diff.changes.trim() !== '';
-          return hasChanges || hasContent;
-        });
+            // Filter out sensitive files and validate diffs
+            const validatedDiffs: GitDiff[] = [];
+            const skippedFiles: string[] = [];
 
-        if (meaningfulDiffs.length === 0) {
-          throw new SecureError(
-            'No meaningful changes found in provided diffs',
-            ErrorType.VALIDATION_ERROR,
-            { operation: 'generateCommitMessage' },
-            true
-          );
-        }
+            for (const diff of diffs) {
+              // Check if file should be skipped for privacy reasons
+              const skipCheck = shouldSkipFileForAI(diff.file, diff.changes || '');
+              if (skipCheck.skip) {
+                console.warn(`⚠️  Skipping ${diff.file}: ${skipCheck.reason}`);
+                skippedFiles.push(diff.file);
+                continue;
+              }
 
-        for (const diff of meaningfulDiffs) {
-          const diffValidation = validateDiffSize(diff.changes, DEFAULT_LIMITS.maxDiffSize);
-          if (!diffValidation.isValid) {
-            throw new SecureError(
-              diffValidation.error!,
-              ErrorType.VALIDATION_ERROR,
-              { operation: 'generateCommitMessage', file: diff.file },
-              true
+              const diffResult = GitDiffSchema.safeParse(diff);
+              if (diffResult.success) {
+                // Additional validation for diff content size
+                const contentResult = DiffContentSchema.safeParse(diff.changes);
+                if (contentResult.success) {
+                  validatedDiffs.push(diffResult.data);
+                } else {
+                  console.warn(`Skipping diff for ${diff.file}: content too large`);
+                }
+              } else {
+                console.warn(`Skipping invalid diff for ${diff.file}:`, diffResult.error.issues);
+              }
+            }
+
+            // Log privacy summary
+            if (skippedFiles.length > 0) {
+              console.warn(
+                `🔒 Privacy: Skipped ${skippedFiles.length} sensitive files from AI processing`
+              );
+            }
+
+            if (validatedDiffs.length === 0) {
+              throw new SecureError(
+                ERROR_MESSAGES.NO_VALID_DIFFS,
+                ErrorType.VALIDATION_ERROR,
+                { operation: 'generateCommitMessage' },
+                true
+              );
+            }
+
+            const config = this.config.getConfig();
+            const model = this.genAI.getGenerativeModel({
+              model: config.model ?? AI_DEFAULT_MODEL,
+            });
+
+            const { prompt } = this.buildJsonPrompt(validatedDiffs);
+
+            if (prompt.length > DEFAULT_LIMITS.maxApiRequestSize) {
+              throw new SecureError(
+                `${ERROR_MESSAGES.PROMPT_SIZE_EXCEEDED} ${DEFAULT_LIMITS.maxApiRequestSize} characters`,
+                ErrorType.VALIDATION_ERROR,
+                { operation: 'generateCommitMessage' },
+                true
+              );
+            }
+
+            const { response } = await withTimeout(
+              model.generateContent(prompt),
+              DEFAULT_LIMITS.timeoutMs
             );
+            const text = response.text();
+            const suggestions = this.parseResponse(text);
+
+            // Validate suggestions using Zod
+            return this.validateAndImprove(suggestions);
+          },
+          { operation: 'generateCommitMessage' }
+        );
+      },
+      AI_RETRY_ATTEMPTS,
+      AI_RETRY_DELAY_MS,
+      { operation: 'generateCommitMessage' }
+    );
+  };
+
+  generateBatchCommitMessages = async (
+    diffs: GitDiff[]
+  ): Promise<{ [filename: string]: CommitSuggestion[] }> => {
+    return withRetry(
+      async () => {
+        return withErrorHandling(
+          async () => {
+            if (!diffs || diffs.length === 0) {
+              throw new SecureError(
+                ERROR_MESSAGES.NO_DIFFS_BATCH,
+                ErrorType.VALIDATION_ERROR,
+                { operation: 'generateBatchCommitMessages' },
+                true
+              );
+            }
+
+            // Filter out sensitive files and validate diffs
+            const validatedDiffs: GitDiff[] = [];
+            const skippedFiles: string[] = [];
+
+            for (const diff of diffs) {
+              // Check if file should be skipped for privacy reasons
+              const skipCheck = shouldSkipFileForAI(diff.file, diff.changes || '');
+              if (skipCheck.skip) {
+                console.warn(`⚠️  Skipping ${diff.file}: ${skipCheck.reason}`);
+                skippedFiles.push(diff.file);
+                continue;
+              }
+
+              const diffResult = GitDiffSchema.safeParse(diff);
+              if (diffResult.success) {
+                // Additional validation for diff content size
+                const contentResult = DiffContentSchema.safeParse(diff.changes);
+                if (contentResult.success) {
+                  validatedDiffs.push(diffResult.data);
+                } else {
+                  console.warn(`Skipping diff for ${diff.file}: content too large`);
+                }
+              } else {
+                console.warn(`Skipping invalid diff for ${diff.file}:`, diffResult.error.issues);
+              }
+            }
+
+            // Log privacy summary
+            if (skippedFiles.length > 0) {
+              console.warn(
+                `🔒 Privacy: Skipped ${skippedFiles.length} sensitive files from AI processing`
+              );
+            }
+
+            if (validatedDiffs.length === 0) {
+              throw new SecureError(
+                ERROR_MESSAGES.NO_VALID_DIFFS_BATCH,
+                ErrorType.VALIDATION_ERROR,
+                { operation: 'generateBatchCommitMessages' },
+                true
+              );
+            }
+
+            const config = this.config.getConfig();
+            const model = this.genAI.getGenerativeModel({
+              model: config.model ?? AI_DEFAULT_MODEL,
+            });
+
+            const { prompt, sanitizedDiffs } = this.buildJsonPrompt(validatedDiffs);
+
+            if (prompt.length > DEFAULT_LIMITS.maxApiRequestSize) {
+              throw new SecureError(
+                `Prompt size ${prompt.length} exceeds limit of ${DEFAULT_LIMITS.maxApiRequestSize} characters`,
+                ErrorType.VALIDATION_ERROR,
+                { operation: 'generateBatchCommitMessages' },
+                true
+              );
+            }
+
+            const { response } = await withTimeout(
+              model.generateContent(prompt),
+              DEFAULT_LIMITS.timeoutMs
+            );
+            const text = response.text();
+            const batchResults = this.parseBatchResponse(text, validatedDiffs, sanitizedDiffs);
+
+            return batchResults;
+          },
+          { operation: 'generateBatchCommitMessages' }
+        );
+      },
+      AI_RETRY_ATTEMPTS,
+      AI_RETRY_DELAY_MS,
+      { operation: 'generateBatchCommitMessages' }
+    );
+  };
+
+  private readonly buildJsonPrompt = (
+    diffs: GitDiff[],
+    baseDir: string = process.cwd()
+  ): { prompt: string; sanitizedDiffs: SanitizedDiff[] } => {
+    // Sanitize all diffs before sending to AI
+    const sanitizedDiffs = diffs.map((diff) => sanitizeGitDiff(diff, baseDir));
+
+    // Create privacy report
+    const privacyReport = createPrivacyReport(sanitizedDiffs);
+
+    // Log privacy warnings if any
+    if (privacyReport.sanitizedFiles > 0) {
+      console.warn(''); // Add newline before privacy notice
+      console.warn(
+        `⚠️  Privacy Notice: ${privacyReport.sanitizedFiles} files were sanitized before sending to AI`
+      );
+      if (privacyReport.warnings.length > 0) {
+        console.warn('   Warnings:');
+        privacyReport.warnings.slice(0, 5).forEach((warning, index) => {
+          console.warn(`   ${index + 1}. ${warning}`);
+        });
+        if (privacyReport.warnings.length > 5) {
+          console.warn(`   ... and ${privacyReport.warnings.length - 5} more warnings`);
+        }
+      }
+    }
+
+    const promptData = {
+      role: 'expert commit message generator for software development',
+      task: 'analyze code changes and craft a single, concise commit message (4-20 words) that clearly describes the functional changes',
+      requirements: {
+        focus:
+          'WHAT WAS BUILT/IMPLEMENTED - Describe the new functionality, features, or significant changes introduced',
+        tense:
+          'Use Past Tense Verbs - Start with action verbs like "Implemented," "Added," "Created," "Refactored," "Fixed," "Optimized"',
+        purpose:
+          'Highlight Purpose/Value - Explain why the change was made and its benefit to the system or users',
+        specificity:
+          'Be Specific, Not Generic - Avoid vague statements; detail the exact functionality',
+        prefixes:
+          'No Prefixes - Do NOT include conventional prefixes like "feat:", "fix:", "chore:"',
+        length: 'Length Constraint - Keep the message between 4 and 20 words',
+      },
+      examples: {
+        good: [
+          {
+            message: 'Implemented Zod validation schemas for type-safe configuration management',
+            reason: 'Describes specific functionality and its purpose clearly',
+          },
+          {
+            message: 'Added ts-pattern utilities for error handling and file type detection',
+            reason: 'Specific about what was added and its functional purpose',
+          },
+          {
+            message: 'Created centralized validation system with comprehensive type definitions',
+            reason: 'Explains the system architecture and its comprehensive nature',
+          },
+          {
+            message: 'Integrated tsup build configuration for optimized bundle generation',
+            reason: 'Clear about the integration purpose and optimization benefit',
+          },
+          {
+            message: 'Built pattern matching utilities for commit message classification',
+            reason: 'Specific about the utility type and its classification purpose',
+          },
+        ],
+        bad: [
+          {
+            message: 'Major updates to validation.ts (+279/-0 lines)',
+            reason: 'Focuses on metrics, not functionality',
+          },
+          {
+            message: 'Updated files for better functionality',
+            reason: 'Too vague; lacks specifics',
+          },
+          {
+            message: 'Improved code quality and maintainability',
+            reason: 'Generic and not descriptive of concrete changes',
+          },
+          {
+            message: 'Enhanced data processing capabilities',
+            reason: 'Lacks details on how or what was enhanced',
+          },
+          {
+            message: 'Added 15 new functions and 3 classes',
+            reason: 'Focuses on quantity rather than purpose or impact',
+          },
+        ],
+      },
+      files: sanitizedDiffs.map((diff, index) => ({
+        id: index + 1,
+        name: diff.file,
+        status: diff.isNew
+          ? 'new file created'
+          : diff.isDeleted
+            ? 'file deleted'
+            : diff.isRenamed
+              ? 'file renamed'
+              : 'modified',
+        changes: diff.changes?.substring(0, UI_CONSTANTS.DIFF_CONTENT_TRUNCATE_LIMIT) || '',
+        truncated: diff.changes && diff.changes.length > UI_CONSTANTS.DIFF_CONTENT_TRUNCATE_LIMIT,
+        additions: diff.additions,
+        deletions: diff.deletions,
+        sanitized: diff.sanitized,
+      })),
+      output: {
+        format: 'json',
+        structure:
+          diffs.length === 1
+            ? {
+                suggestions: [
+                  {
+                    message: 'string (4-20 words)',
+                    confidence: 'number (0-1)',
+                  },
+                ],
+              }
+            : {
+                files: {
+                  filename1: {
+                    message: 'string (4-20 words)',
+                    confidence: 'number (0-1)',
+                  },
+                  filename2: {
+                    message: 'string (4-20 words)',
+                    confidence: 'number (0-1)',
+                  },
+                },
+              },
+        example:
+          diffs.length === 1
+            ? {
+                suggestions: [
+                  {
+                    message: 'Implemented user authentication system',
+                    description: 'Added login and registration functionality',
+                    confidence: 0.9,
+                  },
+                ],
+              }
+            : {
+                files: {
+                  'auth.ts': {
+                    message: 'Implemented user authentication system',
+                    description: 'Added login and registration functionality',
+                    confidence: 0.9,
+                  },
+                  'user.ts': {
+                    message: 'Added user profile management features',
+                    description: 'Created user data models and validation',
+                    confidence: 0.8,
+                  },
+                },
+              },
+      },
+    };
+
+    return {
+      prompt: JSON.stringify(promptData, null, 2),
+      sanitizedDiffs,
+    };
+  };
+
+  private readonly parseBatchResponse = (
+    response: string,
+    diffs: GitDiff[],
+    sanitizedDiffs: SanitizedDiff[]
+  ): { [filename: string]: CommitSuggestion[] } => {
+    const results: { [filename: string]: CommitSuggestion[] } = {};
+
+    try {
+      const jsonMatch = response.match(COMMIT_MESSAGE_PATTERNS.JSON_PATTERN);
+      if (!jsonMatch) {
+        throw new Error(ERROR_MESSAGES.JSON_NOT_FOUND);
+      }
+
+      const parsed = JSON.parse(jsonMatch[0]);
+
+      // Handle different response formats
+      if (parsed.files && typeof parsed.files === 'object') {
+        // Batch format: { files: { filename: { message, description, confidence } } }
+        for (let i = 0; i < diffs.length; i++) {
+          const diff = diffs[i];
+          const sanitizedDiff = sanitizedDiffs[i];
+          const fileResult = parsed.files[sanitizedDiff.file];
+          if (fileResult && fileResult.message) {
+            const suggestion: CommitSuggestion = {
+              message: fileResult.message,
+              description: fileResult.description || '',
+              type: fileResult.type || '',
+              scope: fileResult.scope || '',
+              confidence:
+                typeof fileResult.confidence === 'number'
+                  ? fileResult.confidence
+                  : parseFloat(fileResult.confidence) || UI_CONSTANTS.CONFIDENCE_DEFAULT,
+            };
+            results[diff.file] = this.validateAndImprove([suggestion]);
+          } else {
+            // Fallback if specific file not found in response
+            results[diff.file] = [
+              {
+                message: this.generateFallbackMessage(diff),
+                description: 'Generated fallback commit message',
+                confidence: UI_CONSTANTS.CONFIDENCE_FALLBACK,
+              },
+            ];
           }
         }
+      } else if (parsed.suggestions && Array.isArray(parsed.suggestions)) {
+        // Single file format: { suggestions: [{ message, description, confidence }] }
+        // Apply the same suggestion to all files
+        const suggestions = parsed.suggestions.map((suggestion: any) => ({
+          message: suggestion.message || '',
+          description: suggestion.description || '',
+          type: suggestion.type || '',
+          scope: suggestion.scope || '',
+          confidence:
+            typeof suggestion.confidence === 'number'
+              ? suggestion.confidence
+              : parseFloat(suggestion.confidence) || UI_CONSTANTS.CONFIDENCE_DEFAULT,
+        }));
 
-        const config = this.config.getConfig();
-        const model = this.genAI.getGenerativeModel({ model: config.model || AI_DEFAULT_MODEL });
+        for (const diff of diffs) {
+          results[diff.file] = this.validateAndImprove(suggestions);
+        }
+      } else {
+        // Try to extract any commit messages from the response text
+        const textSuggestions = this.parseTextResponse(response);
+        for (const diff of diffs) {
+          results[diff.file] =
+            textSuggestions.length > 0
+              ? textSuggestions
+              : [
+                  {
+                    message: this.generateFallbackMessage(diff),
+                    description: 'Generated fallback commit message',
+                    confidence: UI_CONSTANTS.CONFIDENCE_FALLBACK,
+                  },
+                ];
+        }
+      }
+    } catch (error) {
+      console.warn(ERROR_MESSAGES.FAILED_PARSE_BATCH_JSON, error);
+      // Generate fallback messages for all files
+      for (const diff of diffs) {
+        results[diff.file] = [
+          {
+            message: this.generateFallbackMessage(diff),
+            description: 'Generated fallback commit message due to parsing error',
+            confidence: UI_CONSTANTS.CONFIDENCE_FALLBACK,
+          },
+        ];
+      }
+    }
 
-        const prompt = this.buildEnhancedPrompt(meaningfulDiffs);
+    return results;
+  };
 
-        if (prompt.length > DEFAULT_LIMITS.maxApiRequestSize) {
-          throw new SecureError(
-            `Prompt size ${prompt.length} exceeds limit of ${DEFAULT_LIMITS.maxApiRequestSize} characters`,
-            ErrorType.VALIDATION_ERROR,
-            { operation: 'generateCommitMessage' },
-            true
+  private readonly generateFallbackMessage = (diff: GitDiff): string => {
+    const fileName = diff.file.split('/').pop() ?? diff.file;
+
+    if (diff.isNew) {
+      return `Created new ${fileName} file with initial implementation`;
+    } else if (diff.isDeleted) {
+      return `Removed ${fileName} file as it is no longer needed`;
+    } else if (diff.additions > diff.deletions * 2) {
+      return `Added new functionality to ${fileName} file`;
+    } else if (diff.deletions > diff.additions * 2) {
+      return `Removed unused code from ${fileName} file`;
+    } else {
+      return `Updated ${fileName} file with code improvements`;
+    }
+  };
+
+  private readonly validateAndImprove = (suggestions: CommitSuggestion[]): CommitSuggestion[] => {
+    const validatedSuggestions: CommitSuggestion[] = [];
+
+    for (const suggestion of suggestions) {
+      const result = CommitSuggestionSchema.safeParse(suggestion);
+      if (result.success) {
+        let improvedMessage = result.data.message.trim();
+
+        // Validate word count - reject messages that are too short/long
+        const wordCount = improvedMessage.split(/\s+/).length;
+        let confidence = result.data.confidence;
+
+        if (wordCount < UI_CONSTANTS.MIN_WORD_COUNT) {
+          // Don't add filler words - mark as low confidence instead
+          confidence = Math.max(
+            UI_CONSTANTS.CONFIDENCE_MIN,
+            confidence - UI_CONSTANTS.CONFIDENCE_DECREASE
           );
+        } else if (wordCount > UI_CONSTANTS.MAX_WORD_COUNT) {
+          // Truncate to exactly max words without adding filler
+          const words = improvedMessage.split(/\s+/);
+          improvedMessage = words.slice(0, UI_CONSTANTS.MAX_WORD_COUNT).join(' ');
+          confidence = Math.max(0.6, confidence - 0.1);
         }
 
-        const { response } = await withTimeout(
-          model.generateContent(prompt),
-          DEFAULT_LIMITS.timeoutMs
-        );
-        const text = response.text();
-        const suggestions = this.parseResponse(text);
-
-        return this.validateAndImprove(suggestions);
-      }, { operation: 'generateCommitMessage' });
-    }, AI_RETRY_ATTEMPTS, AI_RETRY_DELAY_MS, { operation: 'generateCommitMessage' });
-  }
-
-  private getMaxLengthForStyle = (): number => {
-    return 96; // Standard length for descriptive commit messages
-  }
-
-  private getDefaultPrompt = (): string => {
-    let prompt = 'You are an expert at analyzing code changes and generating precise commit messages.\n\n';
-
-    prompt += 'REQUIREMENTS:\n';
-    prompt += '- Generate 7-15 words describing EXACTLY what changed in the code\n';
-    prompt += '- Be SPECIFIC about the actual changes, not generic improvements\n';
-    prompt += '- Use past tense verbs: "Converted", "Added", "Removed", "Replaced", "Refactored"\n';
-    prompt += '- NO prefixes like "feat:", "fix:", "chore:"\n';
-    prompt += '- Focus on the CODE CHANGES, not theoretical benefits\n\n';
-
-    prompt += 'GOOD EXAMPLES (specific to actual changes):\n';
-    prompt += '- "Converted getUserData function from regular function to arrow function"\n';
-    prompt += '- "Added email validation regex pattern to user input validator"\n';
-    prompt += '- "Removed unused import statements and cleaned up dependencies"\n';
-    prompt += '- "Replaced setTimeout with setInterval in polling mechanism"\n';
-    prompt += '- "Refactored database query methods to use async await syntax"\n\n';
-
-    prompt += 'BAD EXAMPLES (avoid these generic patterns):\n';
-    prompt += '- "Enhanced service logic for improved performance" (too generic)\n';
-    prompt += '- "Updated configuration for better functionality" (vague)\n';
-    prompt += '- "Improved code quality and maintainability" (meaningless)\n';
-    prompt += '- "Enhanced data processing capabilities" (no specifics)\n\n';
-
-    prompt += 'ANALYZE the actual code diff and describe the SPECIFIC technical changes made.\n';
-
-    return prompt;
-  }
-
-  private buildEnhancedPrompt = (diffs: GitDiff[]): string => {
-    let prompt = this.getDefaultPrompt();
-
-    prompt += `\n\nFILE ANALYSIS:\n`;
-
-    // Show the actual diff content for precise analysis
-    diffs.forEach((diff, index) => {
-      let status = 'Modified';
-      if (diff.isNew) status = 'New file created';
-      else if (diff.isDeleted) status = 'File deleted';
-      else if (diff.isRenamed) status = 'File renamed';
-
-      prompt += `\nFile: ${diff.file}\n`;
-      prompt += `Status: ${status}\n`;
-      prompt += `Changes: +${diff.additions} lines, -${diff.deletions} lines\n`;
-
-      if (diff.changes && diff.changes.trim()) {
-        // Show more of the actual diff content for better analysis
-        const diffPreview = diff.changes.substring(0, 2000); // Increased from AI_DIFF_PREVIEW_LENGTH
-        prompt += `\nActual code changes:\n${diffPreview}\n`;
-        if (diff.changes.length > 2000) {
-          prompt += '... (diff truncated)\n';
+        if (improvedMessage.length > UI_CONSTANTS.MESSAGE_MAX_LENGTH) {
+          improvedMessage = `${improvedMessage.substring(0, UI_CONSTANTS.MESSAGE_MAX_LENGTH)}...`;
         }
+
+        validatedSuggestions.push({
+          ...result.data,
+          message: improvedMessage,
+          confidence,
+        });
+      } else {
+        console.warn('Skipping invalid suggestion:', result.error.issues);
       }
-    });
+    }
 
-    prompt += '\nBased on the ACTUAL CODE CHANGES shown above:\n';
-    prompt += '1. Identify the SPECIFIC technical changes made (what functions/methods/syntax changed)\n';
-    prompt += '2. Generate a precise 7-15 word message describing exactly what was changed\n';
-    prompt += '3. Focus on the code modifications, not generic improvements\n';
-    prompt += '\nReturn as JSON: {"suggestions": [{"message": "...", "description": "...", "confidence": 0.95}]}\n';
+    return validatedSuggestions;
+  };
 
-    return prompt;
-  }
-
-  private validateAndImprove = (suggestions: CommitSuggestion[]): CommitSuggestion[] => {
-    return suggestions.map(suggestion => {
-      let improvedMessage = suggestion.message.trim();
-
-      // Validate word count (7-21 words) - reject messages that are too short/long
-      const wordCount = improvedMessage.split(/\s+/).length;
-      let confidence = suggestion.confidence || 0.8;
-
-      if (wordCount < 7) {
-        // Don't add filler words - mark as low confidence instead
-        confidence = Math.max(0.3, confidence - 0.4);
-      } else if (wordCount > 25) {
-        // Truncate to exactly 21 words without adding filler
-        const words = improvedMessage.split(/\s+/);
-        improvedMessage = words.slice(0, 25).join(' ');
-        confidence = Math.max(0.6, confidence - 0.1);
-      }
-
-      if (improvedMessage.length > 96) {
-        improvedMessage = improvedMessage.substring(0, 96) + '...';
-      }
-
-      return {
-        ...suggestion,
-        message: improvedMessage,
-        confidence
-      };
-    });
-  }
-
-  private parseResponse = (response: string): CommitSuggestion[] => {
+  private readonly parseResponse = (response: string): CommitSuggestion[] => {
     try {
-      const jsonMatch = response.match(/\{[\s\S]*\}/);
+      const jsonMatch = response.match(COMMIT_MESSAGE_PATTERNS.JSON_PATTERN);
       if (!jsonMatch) {
-        throw new Error('No JSON found in response');
+        throw new Error(ERROR_MESSAGES.JSON_NOT_FOUND);
       }
 
       const parsed = JSON.parse(jsonMatch[0]);
 
       if (parsed.suggestions && Array.isArray(parsed.suggestions)) {
         return parsed.suggestions.map((suggestion: any) => ({
-          message: suggestion.message || '',
-          description: suggestion.description || '',
-          type: suggestion.type || '',
-          scope: suggestion.scope || '',
-          confidence: suggestion.confidence || 0.8
+          message: suggestion.message ?? '',
+          description: suggestion.description ?? '',
+          type: suggestion.type ?? '',
+          scope: suggestion.scope ?? '',
+          confidence:
+            typeof suggestion.confidence === 'number'
+              ? suggestion.confidence
+              : parseFloat(suggestion.confidence) || 0.8,
         }));
       }
     } catch {
@@ -238,19 +572,22 @@ export class AIService {
     }
 
     return this.parseTextResponse(response);
-  }
+  };
 
-  private parseTextResponse = (response: string): CommitSuggestion[] => {
-    const lines = response.split('\n').filter(line => line.trim());
+  private readonly parseTextResponse = (response: string): CommitSuggestion[] => {
+    const lines = response.split('\n').filter((line) => line.trim());
     const suggestions: CommitSuggestion[] = [];
 
     for (const line of lines) {
-      if (line.match(/^\d+\./) || line.includes('feat:') || line.includes('fix:') || line.includes('chore:')) {
-        const message = line.replace(/^\d+\.\s*/, '').trim();
+      if (
+        line.match(COMMIT_MESSAGE_PATTERNS.NUMBERED_PATTERN) ||
+        COMMIT_MESSAGE_PATTERNS.AVOID_PREFIXES.some((prefix: string) => line.includes(prefix))
+      ) {
+        const message = line.replace(COMMIT_MESSAGE_PATTERNS.NUMBERED_PATTERN, '').trim();
         if (message && message.length > 5) {
           suggestions.push({
             message,
-            confidence: 0.8
+            confidence: UI_CONSTANTS.CONFIDENCE_DEFAULT,
           });
         }
       }
@@ -258,13 +595,12 @@ export class AIService {
 
     if (suggestions.length === 0) {
       suggestions.push({
-        message: 'Update files',
-        description: 'Generated fallback commit message',
-        confidence: 0.3
+        message: COMMIT_MESSAGES.FALLBACK_IMPLEMENT,
+        description: COMMIT_MESSAGES.FALLBACK_DESCRIPTION,
+        confidence: UI_CONSTANTS.CONFIDENCE_FALLBACK,
       });
     }
 
     return suggestions.slice(0, AI_MAX_SUGGESTIONS);
-  }
-
+  };
 }

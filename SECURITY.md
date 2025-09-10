@@ -1,109 +1,109 @@
-# Security Implementation Report
+# Security Policy
 
-## 🔒 Security Vulnerabilities Fixed
+## Overview
 
-### 1. **Input Validation & Sanitization** ✅
-- **Added comprehensive input validation** for all user inputs
-- **Sanitized file paths** to prevent path traversal attacks
-- **Validated configuration keys and values** with strict type checking
-- **Added commit message validation** to prevent malicious content
-- **Implemented API key format validation**
+CommitX implements comprehensive security measures to protect user data and prevent common security vulnerabilities. This document outlines the security features, data handling practices, and privacy protections implemented in the application.
 
-### 2. **Path Traversal Protection** ✅
-- **Added path sanitization** using `path.resolve()` and validation
-- **Implemented directory traversal detection** with pattern matching
-- **Added base directory validation** to ensure paths stay within repository
-- **Created secure file path validation** in Git service
+## Data Privacy & Protection
 
-### 3. **Secure API Key Handling** ✅
-- **Prioritized environment variables** over config file storage
-- **Never store API keys in config files** - only use environment variables
-- **Added API key format validation** with proper error handling
-- **Implemented secure key masking** in configuration display
-- **Added proper file permissions** (0o600) for config files
+### Data Sent to AI Service
 
-### 4. **Resource Limits & Timeouts** ✅
-- **Implemented file size limits** (10MB default)
-- **Added diff content size limits** (50KB default)
-- **Set API request size limits** (100KB default)
-- **Added operation timeouts** (30 seconds default)
-- **Implemented memory management** for large files
+- **File paths**: Sanitized to remove usernames and sensitive path segments
+- **Code changes**: Limited to 3000 characters per file, with sensitive content redacted
+- **File metadata**: Addition/deletion counts and file status only
+- **Total request size**: Capped at 100KB
 
-### 5. **Comprehensive Error Handling** ✅
-- **Created SecureError class** with proper error categorization
-- **Added error recovery mechanisms** with retry logic
-- **Implemented error sanitization** to prevent information leakage
-- **Added graceful degradation** for non-critical failures
-- **Created comprehensive error logging** with context
+### Data NOT Sent to AI Service
 
-## 🛡️ Security Features Implemented
+- API keys or authentication tokens
+- Personal information (names, emails, phone numbers)
+- System information (OS details, hardware info)
+- Repository metadata (remote URLs, branch names)
+- Configuration data (user settings, preferences)
 
-### Security Utilities (`src/utils/security.ts`)
-- **Path validation and sanitization**
-- **File size validation**
-- **Input validation for all data types**
-- **API key validation**
-- **Diff content size validation**
-- **Timeout management**
-- **Error message sanitization**
+### Automatic Privacy Protections
 
-### Error Handling (`src/utils/error-handler.ts`)
-- **SecureError class** with error categorization
-- **Error recovery mechanisms**
-- **Retry logic with exponential backoff**
-- **Error sanitization**
-- **Comprehensive error logging**
+- **Sensitive file filtering**: Automatically skips `.env`, `.key`, `.pem`, `.p12`, `.pfx`, `.p8` files
+- **Directory protection**: Skips files in `secrets/`, `keys/`, `credentials/` directories
+- **Content redaction**: Automatically detects and redacts potential secrets, API keys, passwords, and tokens
+- **Path sanitization**: Removes usernames from file paths before processing
 
-### Git Service Security (`src/services/git.ts`)
-- **Path traversal protection**
-- **File path validation**
-- **Command injection prevention**
-- **Resource limit enforcement**
-- **Timeout handling for all operations**
+## Security Features
 
-### Configuration Security (`src/config/index.ts`)
-- **Secure API key handling**
-- **Configuration validation**
-- **File permission management**
-- **Input sanitization**
-- **Environment variable prioritization**
+### Input Validation & Sanitization
 
-### AI Service Security (`src/services/ai.ts`)
-- **API key validation**
-- **Request size limits**
-- **Timeout handling**
-- **Error recovery with retries**
-- **Input validation**
+- Comprehensive input validation for all user inputs
+- File path sanitization to prevent path traversal attacks
+- Configuration key and value validation with strict type checking
+- Commit message validation to prevent malicious content
+- API key format validation
 
-### CLI Security (`src/cli.ts`)
-- **Input validation for all commands**
-- **Error handling for all operations**
-- **Secure configuration management**
-- **Sensitive data masking**
+### Path Traversal Protection
 
-## 🔧 Security Configuration
+- Path sanitization using `path.resolve()` and validation
+- Directory traversal detection with pattern matching
+- Base directory validation to ensure paths stay within repository
+- Secure file path validation in Git service
+
+### Secure API Key Handling
+
+- Environment variables prioritized over config file storage
+- API keys never stored in configuration files
+- API key format validation with proper error handling
+- Secure key masking in configuration display
+- Proper file permissions (0o600) for config files
+
+### Resource Limits & Timeouts
+
+- File size limits (10MB default)
+- Diff content size limits (50KB default)
+- API request size limits (100KB default)
+- Operation timeouts (30 seconds default)
+- Memory management for large files
+
+### Error Handling
+
+- SecureError class with proper error categorization
+- Error recovery mechanisms with retry logic
+- Error sanitization to prevent information leakage
+- Graceful degradation for non-critical failures
+- Comprehensive error logging with context
+
+## Security Configuration
 
 ### Resource Limits
+
 ```typescript
 const DEFAULT_LIMITS: ResourceLimits = {
-  maxFileSize: 10 * 1024 * 1024,    // 10MB
-  maxDiffSize: 50000,                // 50KB
-  maxApiRequestSize: 100000,         // 100KB
-  timeoutMs: 30000                   // 30 seconds
+  maxFileSize: 10 * 1024 * 1024, // 10MB
+  maxDiffSize: 50000, // 50KB
+  maxApiRequestSize: 100000, // 100KB
+  timeoutMs: 30000, // 30 seconds
 };
 ```
 
 ### File Permissions
+
 - **Config directory**: `0o700` (owner read/write/execute only)
 - **Config file**: `0o600` (owner read/write only)
 
 ### Input Validation Rules
+
 - **File paths**: Must be within repository directory
 - **API keys**: 10-200 characters, alphanumeric with hyphens/underscores
 - **Commit messages**: 1-200 characters, no malicious patterns
 - **Configuration values**: Type-specific validation with sanitization
 
-## 🚨 Security Best Practices Implemented
+## Privacy Command
+
+Use `yarn cx privacy` to view detailed information about:
+
+- What data is sent to the AI service
+- Privacy protections in place
+- Sensitive file types that are automatically skipped
+- Data handling practices
+
+## Security Best Practices
 
 1. **Defense in Depth**: Multiple layers of validation and security checks
 2. **Principle of Least Privilege**: Minimal file permissions and access
@@ -113,44 +113,10 @@ const DEFAULT_LIMITS: ResourceLimits = {
 6. **Secure Defaults**: Safe configuration defaults
 7. **Environment Variables**: Sensitive data only in environment variables
 8. **Path Sanitization**: Protection against directory traversal
-9. **Retry Logic**: Graceful handling of transient failures
-10. **Logging Security**: Sensitive data masked in logs
+9. **Data Minimization**: Only necessary data sent to external services
+10. **Transparency**: Clear visibility into data handling practices
 
-## 🔍 Security Testing Recommendations
-
-1. **Input Fuzzing**: Test with malicious file paths and inputs
-2. **Resource Exhaustion**: Test with very large files
-3. **Path Traversal**: Test with `../` and similar patterns
-4. **API Key Exposure**: Verify keys are not logged or exposed
-5. **Error Handling**: Test error scenarios for information leakage
-6. **Timeout Testing**: Verify operations timeout appropriately
-7. **Permission Testing**: Verify file permissions are correct
-
-## 📋 Security Checklist
-
-- ✅ Input validation implemented
-- ✅ Path traversal protection added
-- ✅ API key security implemented
-- ✅ Resource limits enforced
-- ✅ Error handling comprehensive
-- ✅ File permissions secured
-- ✅ Timeout handling added
-- ✅ Retry mechanisms implemented
-- ✅ Error sanitization added
-- ✅ Configuration validation added
-
-## 🚀 Usage
-
-The security features are automatically enabled and require no additional configuration. The system will:
-
-1. **Validate all inputs** before processing
-2. **Sanitize file paths** to prevent attacks
-3. **Enforce resource limits** to prevent abuse
-4. **Handle errors securely** without information leakage
-5. **Use environment variables** for sensitive data
-6. **Apply proper file permissions** automatically
-
-## 🔐 Environment Variables
+## Environment Variables
 
 Set your API key securely using environment variables:
 
@@ -160,7 +126,17 @@ export GEMINI_API_KEY="your_api_key_here"
 
 Never store API keys in configuration files or commit them to version control.
 
-## 📞 Security Issues
+## Security Testing
+
+The application includes built-in security testing for:
+
+- Input validation and sanitization
+- Path traversal protection
+- Resource limit enforcement
+- Error handling and information leakage
+- Privacy protection mechanisms
+
+## Reporting Security Issues
 
 If you discover a security vulnerability, please:
 
@@ -169,8 +145,17 @@ If you discover a security vulnerability, please:
 3. **Include** detailed reproduction steps
 4. **Wait** for confirmation before public disclosure
 
+## Compliance
+
+This security implementation helps ensure compliance with:
+
+- Data privacy regulations
+- Security best practices
+- Enterprise security requirements
+- Open source security standards
+
 ---
 
-**Security Implementation Date**: $(date)
+**Last Updated**: December 2024
 **Version**: 1.0.0
-**Status**: ✅ All security fixes implemented and tested
+**Status**: ✅ Security features implemented and tested

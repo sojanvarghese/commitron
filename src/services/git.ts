@@ -1,5 +1,7 @@
-import simpleGit, { SimpleGit } from 'simple-git';
-import { GitDiff, GitStatus } from '../types/common.js';
+import type { SimpleGit } from 'simple-git';
+import simpleGit from 'simple-git';
+import chalk from 'chalk';
+import type { GitDiff, GitStatus } from '../types/common.js';
 import {
   validateAndSanitizePath,
   validateDiffSize,
@@ -8,18 +10,15 @@ import {
   validateCommitMessage,
 } from '../utils/security.js';
 import { ErrorType } from '../types/error-handler.js';
-import {
-  ErrorHandler,
-  withErrorHandling,
-  withRetry,
-  SecureError
-} from '../utils/error-handler.js';
+import { ErrorHandler, withErrorHandling, withRetry, SecureError } from '../utils/error-handler.js';
 import { GIT_TIMEOUT_MS, GIT_RETRY_ATTEMPTS, GIT_RETRY_DELAY_MS } from '../constants/git.js';
+import { ERROR_MESSAGES } from '../constants/messages.js';
+import { UI_CONSTANTS } from '../constants/ui.js';
 
 export class GitService {
-  private git: SimpleGit;
-  private errorHandler: ErrorHandler;
-  private repositoryPath: string;
+  private readonly git: SimpleGit;
+  private readonly errorHandler: ErrorHandler;
+  private readonly repositoryPath: string;
 
   constructor() {
     this.git = simpleGit();
@@ -27,45 +26,45 @@ export class GitService {
     this.repositoryPath = process.cwd();
   }
 
-
   isGitRepository = async (): Promise<boolean> => {
-    return withErrorHandling(async () => {
-      const validation = await validateGitRepository(this.repositoryPath);
-      if (!validation.isValid) {
-        throw new SecureError(
-          validation.error!,
-          ErrorType.GIT_ERROR,
-          { operation: 'isGitRepository' },
-          false
-        );
-      }
-      return true;
-    }, { operation: 'isGitRepository' });
-  }
-
+    return withErrorHandling(
+      async () => {
+        const validation = await validateGitRepository(this.repositoryPath);
+        if (!validation.isValid) {
+          throw new SecureError(
+            validation.error!,
+            ErrorType.GIT_ERROR,
+            { operation: 'isGitRepository' },
+            false
+          );
+        }
+        return true;
+      },
+      { operation: 'isGitRepository' }
+    );
+  };
 
   getStatus = async (): Promise<GitStatus> => {
-    return withErrorHandling(async () => {
-      const status = await withTimeout(
-        this.git.status(),
-        GIT_TIMEOUT_MS
-      );
+    return withErrorHandling(
+      async () => {
+        const status = await withTimeout(this.git.status(), GIT_TIMEOUT_MS);
 
-      const staged = this.validateFilePaths(status.staged);
-      const unstaged = this.validateFilePaths(status.modified);
-      const untracked = this.validateFilePaths(status.not_added);
+        const staged = this.validateFilePaths(status.staged);
+        const unstaged = this.validateFilePaths(status.modified);
+        const untracked = this.validateFilePaths(status.not_added);
 
-      return {
-        staged,
-        unstaged,
-        untracked,
-        total: staged.length + unstaged.length + untracked.length
-      };
-    }, { operation: 'getStatus' });
-  }
+        return {
+          staged,
+          unstaged,
+          untracked,
+          total: staged.length + unstaged.length + untracked.length,
+        };
+      },
+      { operation: 'getStatus' }
+    );
+  };
 
-
-  private validateFilePaths = (filePaths: string[]): string[] => {
+  private readonly validateFilePaths = (filePaths: string[]): string[] => {
     const validPaths: string[] = [];
 
     for (const filePath of filePaths) {
@@ -80,169 +79,198 @@ export class GitService {
     return validPaths;
   };
 
-
   getUnstagedFiles = async (): Promise<string[]> => {
-    return withErrorHandling(async () => {
-      const status = await withTimeout(
-        this.git.status(),
-        GIT_TIMEOUT_MS
-      );
+    return withErrorHandling(
+      async () => {
+        const status = await withTimeout(this.git.status(), GIT_TIMEOUT_MS);
 
-      const allFiles = [...status.modified, ...status.not_added, ...status.deleted];
-      return this.validateFilePaths(allFiles);
-    }, { operation: 'getUnstagedFiles' });
-  }
-
+        const allFiles = [...status.modified, ...status.not_added, ...status.deleted];
+        return this.validateFilePaths(allFiles);
+      },
+      { operation: 'getUnstagedFiles' }
+    );
+  };
 
   getFileDiff = async (file: string, staged: boolean = false): Promise<GitDiff> => {
-    return withErrorHandling(async () => {
-      const pathValidation = validateAndSanitizePath(file, this.repositoryPath);
-      if (!pathValidation.isValid) {
-        throw new SecureError(
-          pathValidation.error!,
-          ErrorType.SECURITY_ERROR,
-          { operation: 'getFileDiff', file },
-          false
-        );
-      }
+    return withErrorHandling(
+      async () => {
+        const pathValidation = validateAndSanitizePath(file, this.repositoryPath);
+        if (!pathValidation.isValid) {
+          throw new SecureError(
+            pathValidation.error!,
+            ErrorType.SECURITY_ERROR,
+            { operation: 'getFileDiff', file },
+            false
+          );
+        }
 
-      const validatedFile = pathValidation.sanitizedValue!;
-      const status = await withTimeout(
-        this.git.status(),
-        GIT_TIMEOUT_MS
-      );
+        const validatedFile = pathValidation.sanitizedValue!;
+        const status = await withTimeout(this.git.status(), GIT_TIMEOUT_MS);
 
-      // Convert absolute path to relative path for comparison with git status
-      const relativeFile = file.startsWith(this.repositoryPath)
-        ? file.substring(this.repositoryPath.length + 1)
-        : file;
+        // Convert absolute path to relative path for comparison with git status
+        const relativeFile = file.startsWith(this.repositoryPath)
+          ? file.substring(this.repositoryPath.length + 1)
+          : file;
 
-      try {
-        const isDeleted = status.deleted.includes(relativeFile);
+        try {
+          const isDeleted = status.deleted.includes(relativeFile);
 
-        if (isDeleted && !staged) {
+          if (isDeleted && !staged) {
+            return {
+              file: validatedFile,
+              additions: 0,
+              deletions: 1,
+              changes: `File deleted: ${validatedFile}`,
+              isNew: false,
+              isDeleted: true,
+              isRenamed: false,
+              oldPath: undefined,
+            };
+          }
+
+          const isUntracked = status.not_added.includes(relativeFile);
+
+          if (isUntracked && !staged) {
+            // For untracked files, read the file content directly
+            const { readFile } = await import('fs/promises');
+            const fileContent = await readFile(validatedFile, 'utf-8');
+            const lines = fileContent.split('\n').length;
+
+            return {
+              file: validatedFile,
+              additions: lines,
+              deletions: 0,
+              changes: `+${fileContent}`,
+              isNew: true,
+              isDeleted: false,
+              isRenamed: false,
+              oldPath: undefined,
+            };
+          }
+
+          const diffArgs = staged ? ['--cached', validatedFile] : [validatedFile];
+          const diff = await withTimeout(this.git.diff(diffArgs), GIT_TIMEOUT_MS);
+          const diffSummary = await withTimeout(this.git.diffSummary(diffArgs), GIT_TIMEOUT_MS);
+
+          const diffValidation = validateDiffSize(diff);
+          if (!diffValidation.isValid) {
+            // For lock files, use summary data instead of full diff content
+            const isLockFile =
+              relativeFile.includes('yarn.lock') ||
+              relativeFile.includes('package-lock.json') ||
+              relativeFile.includes('pnpm-lock.yaml');
+
+            if (isLockFile) {
+              const fileSummary = diffSummary.files.find((f: any) => f.file === relativeFile);
+              return {
+                file: validatedFile,
+                additions: fileSummary?.insertions || 0,
+                deletions: fileSummary?.deletions || 0,
+                changes: `Lock file updated: ${fileSummary?.insertions || 0} additions, ${fileSummary?.deletions || 0} deletions`,
+                isNew:
+                  status.created.includes(relativeFile) || status.not_added.includes(relativeFile),
+                isDeleted: status.deleted.includes(relativeFile),
+                isRenamed: status.renamed.some((r: any) => r.to === relativeFile),
+                oldPath: status.renamed.find((r: any) => r.to === relativeFile)?.from,
+              };
+            }
+
+            throw new SecureError(
+              diffValidation.error!,
+              ErrorType.VALIDATION_ERROR,
+              { operation: 'getFileDiff', file: validatedFile },
+              true
+            );
+          }
+
+          const fileSummary = diffSummary.files.find((f: any) => f.file === relativeFile);
+
+          return {
+            file: validatedFile,
+            additions: fileSummary?.insertions || 0,
+            deletions: fileSummary?.deletions || 0,
+            changes: diffValidation.sanitizedValue!,
+            isNew: status.created.includes(relativeFile) || status.not_added.includes(relativeFile),
+            isDeleted: status.deleted.includes(relativeFile),
+            isRenamed: status.renamed.some((r: any) => r.to === relativeFile),
+            oldPath: status.renamed.find((r: any) => r.to === relativeFile)?.from,
+          };
+        } catch {
           return {
             file: validatedFile,
             additions: 0,
-            deletions: 1,
-            changes: `File deleted: ${validatedFile}`,
-            isNew: false,
-            isDeleted: true,
-            isRenamed: false,
-            oldPath: undefined
+            deletions: 0,
+            changes: '',
+            isNew: status.created.includes(relativeFile) || status.not_added.includes(relativeFile),
+            isDeleted: status.deleted.includes(relativeFile),
+            isRenamed: status.renamed.some((r: any) => r.to === relativeFile),
+            oldPath: status.renamed.find((r: any) => r.to === relativeFile)?.from,
           };
         }
+      },
+      { operation: 'getFileDiff', file }
+    );
+  };
 
-        const diffArgs = staged ? ['--cached', validatedFile] : [validatedFile];
-        const diff = await withTimeout(
-          this.git.diff(diffArgs),
-          GIT_TIMEOUT_MS
-        );
-        const diffSummary = await withTimeout(
-          this.git.diffSummary(diffArgs),
-          GIT_TIMEOUT_MS
-        );
+  getStagedDiff = async (): Promise<GitDiff[]> => {
+    return withErrorHandling(
+      async () => {
+        const status = await withTimeout(this.git.status(), GIT_TIMEOUT_MS);
 
-        const diffValidation = validateDiffSize(diff);
-        if (!diffValidation.isValid) {
+        if (status.staged.length === 0) {
           throw new SecureError(
-            diffValidation.error!,
-            ErrorType.VALIDATION_ERROR,
-            { operation: 'getFileDiff', file: validatedFile },
+            ERROR_MESSAGES.NO_STAGED_CHANGES,
+            ErrorType.GIT_ERROR,
+            { operation: 'getStagedDiff' },
             true
           );
         }
 
-        const fileSummary = diffSummary.files.find((f: any) => f.file === validatedFile);
+        const diffs: GitDiff[] = [];
+        const validatedFiles = this.validateFilePaths(status.staged);
 
-        return {
-          file: validatedFile,
-          additions: fileSummary?.insertions || 0,
-          deletions: fileSummary?.deletions || 0,
-          changes: diffValidation.sanitizedValue!,
-          isNew: status.created.includes(relativeFile) || status.not_added.includes(relativeFile),
-          isDeleted: status.deleted.includes(relativeFile),
-          isRenamed: status.renamed.some((r: any) => r.to === relativeFile),
-          oldPath: status.renamed.find((r: any) => r.to === relativeFile)?.from
-        };
-        } catch {
-          return {
-          file: validatedFile,
-          additions: 0,
-          deletions: 0,
-          changes: '',
-          isNew: status.created.includes(relativeFile) || status.not_added.includes(relativeFile),
-          isDeleted: status.deleted.includes(relativeFile),
-          isRenamed: status.renamed.some((r: any) => r.to === relativeFile),
-          oldPath: status.renamed.find((r: any) => r.to === relativeFile)?.from
-        };
-      }
-    }, { operation: 'getFileDiff', file });
-  }
+        for (const file of validatedFiles) {
+          try {
+            const diff = await withTimeout(this.git.diff(['--cached', file]), GIT_TIMEOUT_MS);
+            const diffSummary = await withTimeout(
+              this.git.diffSummary(['--cached', file]),
+              GIT_TIMEOUT_MS
+            );
 
+            const diffValidation = validateDiffSize(diff);
+            if (!diffValidation.isValid) {
+              console.warn(`Diff too large for ${file}, skipping content`);
+              continue;
+            }
 
-  getStagedDiff = async (): Promise<GitDiff[]> => {
-    return withErrorHandling(async () => {
-      const status = await withTimeout(
-        this.git.status(),
-        GIT_TIMEOUT_MS
-      );
+            const fileSummary = diffSummary.files.find((f: any) => f.file === file);
 
-      if (status.staged.length === 0) {
-        throw new SecureError(
-          'No staged changes found. Please stage your changes with "git add" first.',
-          ErrorType.GIT_ERROR,
-          { operation: 'getStagedDiff' },
-          true
-        );
-      }
-
-      const diffs: GitDiff[] = [];
-      const validatedFiles = this.validateFilePaths(status.staged);
-
-      for (const file of validatedFiles) {
-        try {
-          const diff = await withTimeout(
-            this.git.diff(['--cached', file]),
-            GIT_TIMEOUT_MS
-          );
-          const diffSummary = await withTimeout(
-            this.git.diffSummary(['--cached', file]),
-            GIT_TIMEOUT_MS
-          );
-
-          const diffValidation = validateDiffSize(diff);
-          if (!diffValidation.isValid) {
-            console.warn(`Diff too large for ${file}, skipping content`);
-            continue;
+            diffs.push({
+              file,
+              additions: fileSummary?.insertions || 0,
+              deletions: fileSummary?.deletions || 0,
+              changes: diffValidation.sanitizedValue!,
+              isNew: status.created.includes(file),
+              isDeleted: status.deleted.includes(file),
+              isRenamed: status.renamed.some((r: any) => r.to === file),
+              oldPath: status.renamed.find((r: any) => r.to === file)?.from,
+            });
+          } catch (error) {
+            console.warn(`Failed to get diff for ${file}:`, error);
           }
-
-          const fileSummary = diffSummary.files.find((f: any) => f.file === file);
-
-          diffs.push({
-            file,
-            additions: fileSummary?.insertions || 0,
-            deletions: fileSummary?.deletions || 0,
-            changes: diffValidation.sanitizedValue!,
-            isNew: status.created.includes(file),
-            isDeleted: status.deleted.includes(file),
-            isRenamed: status.renamed.some((r: any) => r.to === file),
-            oldPath: status.renamed.find((r: any) => r.to === file)?.from
-          });
-        } catch (error) {
-          console.warn(`Failed to get diff for ${file}:`, error);
         }
-      }
 
-      return diffs;
-    }, { operation: 'getStagedDiff' });
-  }
+        return diffs;
+      },
+      { operation: 'getStagedDiff' }
+    );
+  };
 
   getChangesSummary = async (): Promise<string> => {
     const diffs = await this.getStagedDiff();
 
     if (diffs.length === 0) {
-      return 'No staged changes found.';
+      return ERROR_MESSAGES.NO_STAGED_CHANGES_DIFF;
     }
 
     let summary = `Changes summary:\n`;
@@ -255,99 +283,97 @@ export class GitService {
     summary += `- ${totalDeletions} line(s) deleted\n\n`;
 
     summary += `Files:\n`;
-    diffs.forEach(diff => {
-      let status = '';
-      if (diff.isNew) status = '[NEW]';
-      else if (diff.isDeleted) status = '[DELETED]';
-      else if (diff.isRenamed) status = '[RENAMED]';
-      else status = '[MODIFIED]';
+    diffs.forEach((diff) => {
+      const status = this.getFileStatus(diff);
 
       summary += `- ${status} ${diff.file} (+${diff.additions}/-${diff.deletions})\n`;
     });
 
     return summary;
-  }
+  };
 
   stageAll = async (): Promise<void> => {
-    return withErrorHandling(async () => {
-      await withTimeout(
-        this.git.add('.'),
-        GIT_TIMEOUT_MS
-      );
-    }, { operation: 'stageAll' });
-  }
+    return withErrorHandling(
+      async () => {
+        await withTimeout(this.git.add('.'), GIT_TIMEOUT_MS);
+      },
+      { operation: 'stageAll' }
+    );
+  };
 
   stageFiles = async (files: string[]): Promise<void> => {
-    return withErrorHandling(async () => {
-      const validatedFiles = this.validateFilePaths(files);
-      if (validatedFiles.length === 0) {
-        throw new SecureError(
-          'No valid files to stage',
-          ErrorType.VALIDATION_ERROR,
-          { operation: 'stageFiles' },
-          true
-        );
-      }
-      await withTimeout(
-        this.git.add(validatedFiles),
-        GIT_TIMEOUT_MS
-      );
-    }, { operation: 'stageFiles' });
-  }
+    return withErrorHandling(
+      async () => {
+        const validatedFiles = this.validateFilePaths(files);
+        if (validatedFiles.length === 0) {
+          throw new SecureError(
+            ERROR_MESSAGES.NO_VALID_FILES,
+            ErrorType.VALIDATION_ERROR,
+            { operation: 'stageFiles' },
+            true
+          );
+        }
+        await withTimeout(this.git.add(validatedFiles), GIT_TIMEOUT_MS);
+      },
+      { operation: 'stageFiles' }
+    );
+  };
 
   stageFile = async (file: string): Promise<void> => {
-    return withErrorHandling(async () => {
-      const pathValidation = validateAndSanitizePath(file, this.repositoryPath);
-      if (!pathValidation.isValid) {
-        throw new SecureError(
-          pathValidation.error!,
-          ErrorType.SECURITY_ERROR,
-          { operation: 'stageFile', file },
-          false
-        );
-      }
-      await withTimeout(
-        this.git.add(pathValidation.sanitizedValue!),
-        GIT_TIMEOUT_MS
-      );
-    }, { operation: 'stageFile', file });
-  }
+    return withErrorHandling(
+      async () => {
+        const pathValidation = validateAndSanitizePath(file, this.repositoryPath);
+        if (!pathValidation.isValid) {
+          throw new SecureError(
+            pathValidation.error!,
+            ErrorType.SECURITY_ERROR,
+            { operation: 'stageFile', file },
+            false
+          );
+        }
+        await withTimeout(this.git.add(pathValidation.sanitizedValue!), GIT_TIMEOUT_MS);
+      },
+      { operation: 'stageFile', file }
+    );
+  };
 
   commit = async (message: string): Promise<void> => {
-    return withErrorHandling(async () => {
-      const messageValidation = validateCommitMessage(message);
-      if (!messageValidation.isValid) {
-        throw new SecureError(
-          messageValidation.error!,
-          ErrorType.VALIDATION_ERROR,
-          { operation: 'commit' },
-          true
-        );
-      }
+    return withErrorHandling(
+      async () => {
+        const messageValidation = validateCommitMessage(message);
+        if (!messageValidation.isValid) {
+          throw new SecureError(
+            messageValidation.error!,
+            ErrorType.VALIDATION_ERROR,
+            { operation: 'commit' },
+            true
+          );
+        }
 
-      await withTimeout(
-        this.git.commit(messageValidation.sanitizedValue!),
-        GIT_TIMEOUT_MS
-      );
-    }, { operation: 'commit' });
-  }
+        await withTimeout(this.git.commit(messageValidation.sanitizedValue!), GIT_TIMEOUT_MS);
+      },
+      { operation: 'commit' }
+    );
+  };
 
   push = async (): Promise<void> => {
-    return withRetry(async () => {
-      return withErrorHandling(async () => {
-        const status = await withTimeout(
-          this.git.status(),
-          GIT_TIMEOUT_MS
-        );
-        const branch = status.current;
+    return withRetry(
+      async () => {
+        return withErrorHandling(
+          async () => {
+            const status = await withTimeout(this.git.status(), GIT_TIMEOUT_MS);
+            const branch = status.current;
 
-        await withTimeout(
-          this.git.push('origin', branch),
-          GIT_TIMEOUT_MS
+            await withTimeout(this.git.push('origin', branch), GIT_TIMEOUT_MS);
+          },
+          { operation: 'push' }
         );
-      }, { operation: 'push' });
-    }, GIT_RETRY_ATTEMPTS, GIT_RETRY_DELAY_MS, { operation: 'push' });
-  }
+      },
+      GIT_RETRY_ATTEMPTS,
+      GIT_RETRY_DELAY_MS,
+      { operation: 'push' }
+    );
+  };
 
   getLastCommitMessage = async (): Promise<string | null> => {
     try {
@@ -356,7 +382,7 @@ export class GitService {
     } catch {
       return null;
     }
-  }
+  };
 
   getRepoInfo = async (): Promise<{ name: string; branch: string }> => {
     const status = await this.git.status();
@@ -375,7 +401,20 @@ export class GitService {
 
     return {
       name: repoName,
-      branch: status.current
+      branch: status.current,
     };
-  }
+  };
+
+  private readonly getFileStatus = (diff: GitDiff): string => {
+    switch (true) {
+      case diff.isNew:
+        return UI_CONSTANTS.FILE_STATUS.NEW;
+      case diff.isDeleted:
+        return UI_CONSTANTS.FILE_STATUS.DELETED;
+      case diff.isRenamed:
+        return UI_CONSTANTS.FILE_STATUS.RENAMED;
+      default:
+        return UI_CONSTANTS.FILE_STATUS.MODIFIED;
+    }
+  };
 }
