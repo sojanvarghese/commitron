@@ -2,7 +2,13 @@ import * as path from 'path';
 import * as fs from 'fs';
 import { promisify } from 'util';
 import type { ValidationResult } from '../types/security.js';
-import { ALLOWED_CONFIG_KEYS, ALLOWED_MODELS, DEFAULT_LIMITS, SUSPICIOUS_COMMIT_PATTERNS, SUSPICIOUS_PATTERNS } from '../constants/security.js';
+import {
+  ALLOWED_CONFIG_KEYS,
+  ALLOWED_MODELS,
+  DEFAULT_LIMITS,
+  SUSPICIOUS_COMMIT_PATTERNS,
+  SUSPICIOUS_PATTERNS,
+} from '../constants/security.js';
 
 const stat = promisify(fs.stat);
 const access = promisify(fs.access);
@@ -13,53 +19,57 @@ export const validateAndSanitizePath = (filePath: string, baseDir: string): Vali
     const resolvedPath = path.resolve(baseDir, normalizedPath);
     const baseResolved = path.resolve(baseDir);
 
+    // Check for path traversal attacks
     if (!resolvedPath.startsWith(baseResolved)) {
       return {
         isValid: false,
-        error: 'Path traversal detected: file path is outside allowed directory'
+        error: 'Path traversal detected: file path is outside allowed directory',
       };
     }
 
-    for (const pattern of SUSPICIOUS_PATTERNS) {
-      if (pattern.test(normalizedPath)) {
-        return {
-          isValid: false,
-          error: `Suspicious path pattern detected: ${pattern.source}`
-        };
-      }
+    // Check for suspicious patterns more efficiently
+    const suspiciousPattern = SUSPICIOUS_PATTERNS.find((pattern) => pattern.test(normalizedPath));
+    if (suspiciousPattern) {
+      return {
+        isValid: false,
+        error: `Suspicious path pattern detected: ${suspiciousPattern.source}`,
+      };
     }
 
     return {
       isValid: true,
-      sanitizedValue: resolvedPath
+      sanitizedValue: resolvedPath,
     };
   } catch (error) {
     return {
       isValid: false,
-      error: `Path validation error: ${error}`
+      error: `Path validation error: ${error}`,
     };
   }
 };
 
-export const validateFileSize = async (filePath: string, maxSize: number = DEFAULT_LIMITS.maxFileSize): Promise<ValidationResult> => {
+export const validateFileSize = async (
+  filePath: string,
+  maxSize: number = DEFAULT_LIMITS.maxFileSize
+): Promise<ValidationResult> => {
   try {
     const stats = await stat(filePath);
 
     if (stats.size > maxSize) {
       return {
         isValid: false,
-        error: `File size ${stats.size} bytes exceeds limit of ${maxSize} bytes`
+        error: `File size ${stats.size} bytes exceeds limit of ${maxSize} bytes`,
       };
     }
 
     return {
       isValid: true,
-      sanitizedValue: filePath
+      sanitizedValue: filePath,
     };
   } catch (error) {
     return {
       isValid: false,
-      error: `File size validation error: ${error}`
+      error: `File size validation error: ${error}`,
     };
   }
 };
@@ -68,20 +78,20 @@ export const validateConfigKey = (key: string): ValidationResult => {
   if (!key || typeof key !== 'string') {
     return {
       isValid: false,
-      error: 'Configuration key must be a non-empty string'
+      error: 'Configuration key must be a non-empty string',
     };
   }
 
   if (!ALLOWED_CONFIG_KEYS.includes(key)) {
     return {
       isValid: false,
-      error: `Invalid configuration key: ${key}. Allowed keys: ${ALLOWED_CONFIG_KEYS.join(', ')}`
+      error: `Invalid configuration key: ${key}. Allowed keys: ${ALLOWED_CONFIG_KEYS.join(', ')}`,
     };
   }
 
   return {
     isValid: true,
-    sanitizedValue: key
+    sanitizedValue: key,
   };
 };
 
@@ -91,28 +101,27 @@ export const validateConfigValue = (key: string, value: any): ValidationResult =
       if (typeof value !== 'string' || value.length < 10) {
         return {
           isValid: false,
-          error: 'API key must be a string with at least 10 characters'
+          error: 'API key must be a string with at least 10 characters',
         };
       }
       return {
         isValid: true,
-        sanitizedValue: value.trim()
+        sanitizedValue: value.trim(),
       };
 
     case 'model':
       if (!ALLOWED_MODELS.includes(value)) {
         return {
           isValid: false,
-          error: `Invalid model: ${value}. Allowed models: ${ALLOWED_MODELS.join(', ')}`
+          error: `Invalid model: ${value}. Allowed models: ${ALLOWED_MODELS.join(', ')}`,
         };
       }
       return { isValid: true, sanitizedValue: value };
 
-
     default:
       return {
         isValid: false,
-        error: `Unknown configuration key: ${key}`
+        error: `Unknown configuration key: ${key}`,
       };
   }
 };
@@ -121,7 +130,7 @@ export const validateCommitMessage = (message: string): ValidationResult => {
   if (!message || typeof message !== 'string') {
     return {
       isValid: false,
-      error: 'Commit message must be a non-empty string'
+      error: 'Commit message must be a non-empty string',
     };
   }
 
@@ -130,14 +139,14 @@ export const validateCommitMessage = (message: string): ValidationResult => {
   if (trimmed.length === 0) {
     return {
       isValid: false,
-      error: 'Commit message cannot be empty'
+      error: 'Commit message cannot be empty',
     };
   }
 
   if (trimmed.length > 200) {
     return {
       isValid: false,
-      error: 'Commit message must be 200 characters or less'
+      error: 'Commit message must be 200 characters or less',
     };
   }
 
@@ -145,48 +154,58 @@ export const validateCommitMessage = (message: string): ValidationResult => {
     if (pattern.test(trimmed)) {
       return {
         isValid: false,
-        error: 'Commit message contains potentially malicious content'
+        error: 'Commit message contains potentially malicious content',
       };
     }
   }
 
   return {
     isValid: true,
-    sanitizedValue: trimmed
+    sanitizedValue: trimmed,
   };
 };
 
-export const validateDiffSize = (diff: string, maxSize: number = DEFAULT_LIMITS.maxDiffSize): ValidationResult => {
+export const validateDiffSize = (
+  diff: string,
+  maxSize: number = DEFAULT_LIMITS.maxDiffSize
+): ValidationResult => {
   if (typeof diff !== 'string') {
     return {
       isValid: false,
-      error: 'Diff content must be a string'
+      error: 'Diff content must be a string',
     };
   }
 
   if (diff.length > maxSize) {
     return {
       isValid: false,
-      error: `Diff content size ${diff.length} characters exceeds limit of ${maxSize} characters`
+      error: `Diff content size ${diff.length} characters exceeds limit of ${maxSize} characters`,
     };
   }
 
   return {
     isValid: true,
-    sanitizedValue: diff
+    sanitizedValue: diff,
   };
 };
 
-export const withTimeout = <T>(promise: Promise<T>, timeoutMs: number = DEFAULT_LIMITS.timeoutMs): Promise<T> => {
+export const withTimeout = <T>(
+  promise: Promise<T>,
+  timeoutMs: number = DEFAULT_LIMITS.timeoutMs
+): Promise<T> => {
   return Promise.race([
     promise,
     new Promise<never>((_, reject) =>
       setTimeout(() => reject(new Error(`Operation timed out after ${timeoutMs}ms`)), timeoutMs)
-    )
+    ),
   ]);
 };
 
-export const safeReadFile = async (filePath: string, baseDir: string, maxSize: number = DEFAULT_LIMITS.maxFileSize): Promise<{ content: string; error?: string }> => {
+export const safeReadFile = async (
+  filePath: string,
+  baseDir: string,
+  maxSize: number = DEFAULT_LIMITS.maxFileSize
+): Promise<{ content: string; error?: string }> => {
   try {
     const pathValidation = validateAndSanitizePath(filePath, baseDir);
     if (!pathValidation.isValid) {
@@ -207,7 +226,7 @@ export const safeReadFile = async (filePath: string, baseDir: string, maxSize: n
   } catch (error) {
     return {
       content: '',
-      error: `Failed to read file: ${error}`
+      error: `Failed to read file: ${error}`,
     };
   }
 };
@@ -216,7 +235,7 @@ export const validateApiKey = (apiKey: string): ValidationResult => {
   if (!apiKey || typeof apiKey !== 'string') {
     return {
       isValid: false,
-      error: 'API key must be a non-empty string'
+      error: 'API key must be a non-empty string',
     };
   }
 
@@ -225,27 +244,27 @@ export const validateApiKey = (apiKey: string): ValidationResult => {
   if (trimmed.length < 10) {
     return {
       isValid: false,
-      error: 'API key must be at least 10 characters long'
+      error: 'API key must be at least 10 characters long',
     };
   }
 
   if (trimmed.length > 200) {
     return {
       isValid: false,
-      error: 'API key must be 200 characters or less'
+      error: 'API key must be 200 characters or less',
     };
   }
 
   if (!/^[A-Za-z0-9_-]+$/.test(trimmed)) {
     return {
       isValid: false,
-      error: 'API key contains invalid characters'
+      error: 'API key contains invalid characters',
     };
   }
 
   return {
     isValid: true,
-    sanitizedValue: trimmed
+    sanitizedValue: trimmed,
   };
 };
 
@@ -275,12 +294,12 @@ export const validateGitRepository = async (dir: string): Promise<ValidationResu
 
     return {
       isValid: true,
-      sanitizedValue: dir
+      sanitizedValue: dir,
     };
   } catch (error) {
     return {
       isValid: false,
-      error: `Not a valid git repository: ${error}`
+      error: `Not a valid git repository: ${error}`,
     };
   }
 };
