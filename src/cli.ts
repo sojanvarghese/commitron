@@ -179,33 +179,42 @@ configCmd
     await withErrorHandling(
       async (): Promise<void> => {
         const config = ConfigManager.getInstance();
+        const allKeys = Object.keys(CommitConfigSchema.shape);
+
+        const isValidKey = (k: string): k is keyof CommitConfig => allKeys.includes(k);
 
         if (key) {
-          // Validate that the key is a valid config key
-          if (!(key in CommitConfigSchema.shape)) {
+          if (!isValidKey(key)) {
             throw new SecureError(
-              `Invalid configuration key: ${key}. Allowed keys: ${Object.keys(CommitConfigSchema.shape).join(', ')}`,
+              `Invalid configuration key: ${key}. Allowed keys: ${allKeys.join(', ')}`,
               ErrorType.VALIDATION_ERROR,
               { operation: 'configGet', key },
               true
             );
           }
 
-          const value = config.get(key as keyof CommitConfig);
-          console.log(`${key}: ${value}`);
+          const value = key === 'apiKey' ? config.getApiKey() : config.get(key);
+          console.log(`${key}: ${key === 'apiKey' && value ? '********' : value}`);
         } else {
           const allConfig = config.getConfig();
+          const apiKey = config.getApiKey();
+
           console.log(chalk.blue('Current configuration:'));
-          Object.entries(allConfig).forEach(([k, v]) => {
-            // Don't show sensitive information
-            const displayValue = k === 'apiKey' ? '***' : v;
+          for (const [k, v] of Object.entries(allConfig)) {
+            const isSensitive = k === 'apiKey';
+            const displayValue = isSensitive ? '********' : v;
             console.log(`  ${k}: ${displayValue}`);
-          });
+          }
+
+          if (!('apiKey' in allConfig)) {
+            console.log(`  apiKey: ${apiKey ? '********' : 'Not set'}`);
+          }
         }
       },
       { operation: 'configGet', key }
     );
   });
+
 
 configCmd
   .command('reset')
