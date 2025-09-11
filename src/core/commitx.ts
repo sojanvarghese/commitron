@@ -33,26 +33,17 @@ export class CommitX {
 
   commit = async (options: CommitOptions = {}): Promise<void> => {
     try {
-      // DEBUG: Log commit options and environment
-      console.log(chalk.gray(`🔍 DEBUG: Starting commit with options: ${JSON.stringify(options, null, 2)}`));
-      console.log(chalk.gray(`🔍 DEBUG: Current working directory: ${process.cwd()}`));
-      console.log(chalk.gray(`🔍 DEBUG: Process arguments: ${process.argv.join(' ')}`));
-
       if (!(await this.gitService.isGitRepository())) {
         throw new Error(
           'Not a git repository. Please run this command from within a git repository.'
         );
       }
 
-      console.log(chalk.gray(`🔍 DEBUG: Git repository validation passed`));
-
       if (options.message || options.all) {
-        console.log(chalk.gray(`🔍 DEBUG: Using traditional commit workflow`));
         return this.commitTraditional(options);
       }
 
       const unstagedFiles = await this.gitService.getUnstagedFiles();
-      console.log(chalk.gray(`🔍 DEBUG: Found ${unstagedFiles.length} unstaged files: ${JSON.stringify(unstagedFiles)}`));
 
       if (unstagedFiles.length === 0) {
         console.log(chalk.yellow(WARNING_MESSAGES.NO_CHANGES_DETECTED));
@@ -63,25 +54,18 @@ export class CommitX {
 
       // Optimize for multiple files: use batch processing when beneficial
       if (unstagedFiles.length > 1) {
-        console.log(chalk.gray(`🔍 DEBUG: Using batch processing for ${unstagedFiles.length} files`));
         processedCount = await this.commitFilesBatch(unstagedFiles, options);
       } else {
-        console.log(chalk.gray(`🔍 DEBUG: Using individual processing for single file`));
         // Fall back to individual processing for single files
         for (const file of unstagedFiles) {
           try {
-            console.log(chalk.gray(`🔍 DEBUG: Processing individual file: ${file}`));
             const success = await this.commitIndividualFile(file, options);
             if (success) {
               processedCount++;
-              console.log(chalk.gray(`🔍 DEBUG: Successfully processed file: ${file}`));
-            } else {
-              console.log(chalk.gray(`🔍 DEBUG: Failed to process file: ${file}`));
             }
           } catch (error) {
-            const fileName = file.split('/').pop() || file;
+            const fileName = file.split('/').pop() ?? file;
             console.error(chalk.red(`Failed to process ${fileName}: ${error}`));
-            console.log(chalk.gray(`🔍 DEBUG: Error details for ${fileName}: ${error}`));
           }
         }
       }
@@ -94,16 +78,12 @@ export class CommitX {
         );
       }
 
-      console.log(chalk.gray(`🔍 DEBUG: Commit process completed. Processed: ${processedCount}, Dry run: ${options.dryRun}`));
-
       // Force exit to prevent delay from lingering HTTP connections
       if (options.dryRun || processedCount > 0) {
-        console.log(chalk.gray(`🔍 DEBUG: Scheduling process exit in ${UI_CONSTANTS.EXIT_DELAY_MS}ms`));
         setTimeout(() => process.exit(0), UI_CONSTANTS.EXIT_DELAY_MS);
       }
     } catch (error) {
       console.error(chalk.red(`Error: ${error}`));
-      console.log(chalk.gray(`🔍 DEBUG: Fatal error in commit process: ${error}`));
       process.exit(1);
     }
   };
@@ -199,35 +179,35 @@ export class CommitX {
   };
 
   private readonly analyzeFilesForBatch = async (files: string[]) => {
-      const aiEligibleFiles: { file: string; diff: GitDiff }[] = [];
-      const summaryFiles: { file: string; diff: GitDiff }[] = [];
-      const skippedFiles: string[] = [];
+    const aiEligibleFiles: { file: string; diff: GitDiff }[] = [];
+    const summaryFiles: { file: string; diff: GitDiff }[] = [];
+    const skippedFiles: string[] = [];
 
-      for (const file of files) {
-        try {
-          const fileName = file.split('/').pop() || file;
-          const fileDiff = await this.gitService.getFileDiff(file, false);
-          const totalChanges = fileDiff.additions + fileDiff.deletions;
+    for (const file of files) {
+      try {
+        const fileName = file.split('/').pop() ?? file;
+        const fileDiff = await this.gitService.getFileDiff(file, false);
+        const totalChanges = fileDiff.additions + fileDiff.deletions;
 
-          // Skip truly empty files
+        // Skip truly empty files
         if (this.shouldSkipFile(fileDiff, totalChanges)) {
           this.logSkippedFile(fileName, fileDiff);
-            skippedFiles.push(file);
-            continue;
-          }
-
-          // Categorize files
-          if (this.shouldUseSummaryMessage(file, totalChanges)) {
-            summaryFiles.push({ file, diff: fileDiff });
-          } else {
-            aiEligibleFiles.push({ file, diff: fileDiff });
-          }
-        } catch (error) {
-          const fileName = file.split('/').pop() || file;
-          console.error(chalk.red(`  Failed to analyze ${fileName}: ${error}`));
           skippedFiles.push(file);
+          continue;
         }
+
+        // Categorize files
+        if (this.shouldUseSummaryMessage(file, totalChanges)) {
+          summaryFiles.push({ file, diff: fileDiff });
+        } else {
+          aiEligibleFiles.push({ file, diff: fileDiff });
+        }
+      } catch (error) {
+        const fileName = file.split('/').pop() ?? file;
+        console.error(chalk.red(`  Failed to analyze ${fileName}: ${error}`));
+        skippedFiles.push(file);
       }
+    }
 
     return { aiEligibleFiles, summaryFiles, skippedFiles };
   };
@@ -257,32 +237,32 @@ export class CommitX {
       return aiCommitMessages;
     }
 
-        const aiSpinner = ora(
-          `Generating commit messages for ${aiEligibleFiles.length} files...`
-        ).start();
+    const aiSpinner = ora(
+      `Generating commit messages for ${aiEligibleFiles.length} files...`
+    ).start();
 
-        try {
-          const aiDiffs = aiEligibleFiles.map((item) => item.diff);
-          const batchResults = await this.getAIService().generateBatchCommitMessages(aiDiffs);
+    try {
+      const aiDiffs = aiEligibleFiles.map((item) => item.diff);
+      const batchResults = await this.getAIService().generateBatchCommitMessages(aiDiffs);
 
-          // Extract the first (best) commit message for each file
-          for (const { file } of aiEligibleFiles) {
-            const suggestions = batchResults[file];
-            aiCommitMessages[file] =
-              suggestions?.[0]?.message ??
-              this.generateFallbackCommitMessage(
-                file,
-                aiEligibleFiles.find((item) => item.file === file)!.diff
-              );
-          }
-          aiSpinner.succeed(`Generated ${Object.keys(aiCommitMessages).length} AI commit messages`);
-        } catch (error) {
-          aiSpinner.fail('AI generation failed, using fallback messages');
-          console.warn(chalk.yellow('Using fallback messages due to AI error:'), error);
+      // Extract the first (best) commit message for each file
+      for (const { file } of aiEligibleFiles) {
+        const suggestions = batchResults[file];
+        aiCommitMessages[file] =
+          suggestions?.[0]?.message ??
+          this.generateFallbackCommitMessage(
+            file,
+            aiEligibleFiles.find((item) => item.file === file)!.diff
+          );
+      }
+      aiSpinner.succeed(`Generated ${Object.keys(aiCommitMessages).length} AI commit messages`);
+    } catch (error) {
+      aiSpinner.fail('AI generation failed, using fallback messages');
+      console.warn(chalk.yellow('Using fallback messages due to AI error:'), error);
 
-          // Generate fallback messages for all AI-eligible files
-          for (const { file, diff } of aiEligibleFiles) {
-            aiCommitMessages[file] = this.generateFallbackCommitMessage(file, diff);
+      // Generate fallback messages for all AI-eligible files
+      for (const { file, diff } of aiEligibleFiles) {
+        aiCommitMessages[file] = this.generateFallbackCommitMessage(file, diff);
       }
     }
 
@@ -295,76 +275,61 @@ export class CommitX {
     aiCommitMessages: { [filename: string]: string },
     options: CommitOptions
   ): Promise<number> => {
-    console.log(chalk.gray(`🔍 DEBUG: Starting batch commit processing`));
-    console.log(chalk.gray(`🔍 DEBUG: AI eligible files: ${aiEligibleFiles.length}, Summary files: ${summaryFiles.length}`));
-    console.log(chalk.gray(`🔍 DEBUG: Options: ${JSON.stringify(options, null, 2)}`));
-
     const commitSpinner = ora(
       options.dryRun ? 'Analyzing files...' : 'Committing files...'
     ).start();
     let processedCount = 0;
 
-      // Process AI-eligible files
-    console.log(chalk.gray(`🔍 DEBUG: Processing ${aiEligibleFiles.length} AI-eligible files`));
-      for (const { file, diff } of aiEligibleFiles) {
-        try {
-        const fileName = file.split('/').pop() || file;
-          const commitMessage = aiCommitMessages[file];
-        console.log(chalk.gray(`🔍 DEBUG: Processing AI file: ${fileName}, message: "${commitMessage}"`));
+    // Process AI-eligible files
+    for (const { file, diff } of aiEligibleFiles) {
+      try {
+        const fileName = file.split('/').pop() ?? file;
+        const commitMessage = aiCommitMessages[file];
 
         if (options.dryRun) {
           console.log(chalk.blue(`  Would stage and commit: ${fileName}`));
           console.log(chalk.gray(`  Changes: +${diff.additions}/-${diff.deletions}`));
           console.log(chalk.blue(`  Message: "${commitMessage}"`));
-          console.log(chalk.gray(`🔍 DEBUG: Dry run - not actually committing ${fileName}`));
         } else {
-          console.log(chalk.gray(`🔍 DEBUG: Staging AI file: ${file}`));
           await this.gitService.stageFile(file);
-          console.log(chalk.gray(`🔍 DEBUG: Committing AI file: ${file} with message: "${commitMessage}"`));
+          // Small delay to prevent Git state conflicts
+          await new Promise((resolve) => setTimeout(resolve, 25));
           await this.gitService.commit(commitMessage);
           console.log(chalk.green(`✅ ${fileName}: ${commitMessage}`));
-          console.log(chalk.gray(`🔍 DEBUG: Successfully committed AI file: ${fileName}`));
         }
-          processedCount++;
-        } catch (error) {
-          const fileName = file.split('/').pop() || file;
+        processedCount++;
+      } catch (error) {
+        const fileName = file.split('/').pop() ?? file;
         console.error(chalk.red(`  Failed to process ${fileName}: ${error}`));
-        console.log(chalk.gray(`🔍 DEBUG: Error processing AI file ${fileName}: ${error}`));
-        }
       }
+    }
 
-      // Process summary files
-    console.log(chalk.gray(`🔍 DEBUG: Processing ${summaryFiles.length} summary files`));
-      for (const { file, diff } of summaryFiles) {
-        try {
-        const fileName = file.split('/').pop() || file;
-          const commitMessage = this.generateSummaryCommitMessage(file, diff);
-        console.log(chalk.gray(`🔍 DEBUG: Processing summary file: ${fileName}, message: "${commitMessage}"`));
+    // Process summary files
+    for (const { file, diff } of summaryFiles) {
+      try {
+        const fileName = file.split('/').pop() ?? file;
+        const commitMessage = this.generateSummaryCommitMessage(file, diff);
 
         if (options.dryRun) {
           console.log(chalk.blue(`  Would stage and commit: ${fileName}`));
           console.log(chalk.gray(`  Changes: +${diff.additions}/-${diff.deletions}`));
           console.log(chalk.blue(`  Message: "${commitMessage}"`));
-          console.log(chalk.gray(`🔍 DEBUG: Dry run - not actually committing ${fileName}`));
         } else {
-          console.log(chalk.gray(`🔍 DEBUG: Staging summary file: ${file}`));
           await this.gitService.stageFile(file);
-          console.log(chalk.gray(`🔍 DEBUG: Committing summary file: ${file} with message: "${commitMessage}"`));
+          // Small delay to prevent Git state conflicts
+          await new Promise((resolve) => setTimeout(resolve, 25));
           await this.gitService.commit(commitMessage);
           console.log(chalk.green(`✅ ${fileName}: ${commitMessage}`));
-          console.log(chalk.gray(`🔍 DEBUG: Successfully committed summary file: ${fileName}`));
         }
-          processedCount++;
-        } catch (error) {
-          const fileName = file.split('/').pop() || file;
+        processedCount++;
+      } catch (error) {
+        const fileName = file.split('/').pop() ?? file;
         console.error(chalk.red(`  Failed to process ${fileName}: ${error}`));
-        console.log(chalk.gray(`🔍 DEBUG: Error processing summary file ${fileName}: ${error}`));
-        }
       }
+    }
 
-    console.log(chalk.gray(`🔍 DEBUG: Batch processing completed. Processed: ${processedCount} files`));
-      commitSpinner.succeed(`Committed ${processedCount} files successfully`);
-      return processedCount;
+    commitSpinner.succeed(`Committed ${processedCount} files successfully`);
+    return processedCount;
   };
 
   private readonly commitIndividualFile = async (
@@ -372,20 +337,11 @@ export class CommitX {
     options: CommitOptions
   ): Promise<boolean> => {
     try {
-      const fileName = file.split('/').pop() || file;
+      const fileName = file.split('/').pop() ?? file;
       console.log(chalk.cyan(`Processing: ${fileName}`));
-      console.log(chalk.gray(`🔍 DEBUG: Processing file: ${file}, options: ${JSON.stringify(options, null, 2)}`));
 
       const fileDiff = await this.gitService.getFileDiff(file, false);
       const totalChanges = fileDiff.additions + fileDiff.deletions;
-      console.log(chalk.gray(`🔍 DEBUG: File diff for ${fileName}: ${JSON.stringify({
-        additions: fileDiff.additions,
-        deletions: fileDiff.deletions,
-        totalChanges,
-        isNew: fileDiff.isNew,
-        isDeleted: fileDiff.isDeleted,
-        changesLength: fileDiff.changes?.length || 0
-      })}`));
 
       // Skip truly empty files (no changes and no content) - but NOT deleted files
       if (
@@ -398,30 +354,25 @@ export class CommitX {
         } else {
           console.log(chalk.yellow(`  Skipping file with no changes: ${fileName}`));
         }
-        console.log(chalk.gray(`🔍 DEBUG: Skipped file ${fileName} - no changes`));
         return false;
       }
 
       if (options.dryRun) {
         console.log(chalk.blue(`  Would stage and commit: ${fileName}`));
         console.log(chalk.gray(`  Changes: +${fileDiff.additions}/-${fileDiff.deletions}`));
-        console.log(chalk.gray(`🔍 DEBUG: Dry run mode - not actually committing`));
 
         // Generate and show the commit message that would be used
         try {
           const spinner = ora('  Generating commit message...').start();
           const shouldUseSummary = this.shouldUseSummaryMessage(file, totalChanges);
-          console.log(chalk.gray(`🔍 DEBUG: Should use summary message: ${shouldUseSummary}`));
-          
+
           const commitMessage = shouldUseSummary
             ? this.generateSummaryCommitMessage(file, fileDiff)
             : ((await this.getAIService().generateCommitMessage([fileDiff]))[0]?.message ??
               `Updated ${fileName}`);
           spinner.succeed();
           console.log(chalk.blue(`  Message: "${commitMessage}"`));
-          console.log(chalk.gray(`🔍 DEBUG: Generated commit message: "${commitMessage}"`));
-        } catch (error) {
-          console.log(chalk.gray(`🔍 DEBUG: AI generation failed, using fallback: ${error}`));
+        } catch {
           const fallbackMessage = this.shouldUseSummaryMessage(file, totalChanges)
             ? this.generateSummaryCommitMessage(file, fileDiff)
             : this.generateFallbackCommitMessage(file, fileDiff);
@@ -431,42 +382,31 @@ export class CommitX {
         return true;
       }
 
-      console.log(chalk.gray(`🔍 DEBUG: Staging file: ${file}`));
       await this.gitService.stageFile(file);
-      console.log(chalk.gray(`🔍 DEBUG: Successfully staged file: ${file}`));
 
       let commitMessage: string;
 
       // For files with many changes or specific file types, use summary message
       const shouldUseSummary = this.shouldUseSummaryMessage(file, totalChanges);
-      console.log(chalk.gray(`🔍 DEBUG: Should use summary message: ${shouldUseSummary}`));
-      
+
       if (shouldUseSummary) {
         commitMessage = this.generateSummaryCommitMessage(file, fileDiff);
-        console.log(chalk.gray(`🔍 DEBUG: Using summary message: "${commitMessage}"`));
       } else {
         try {
-          console.log(chalk.gray(`🔍 DEBUG: Generating AI commit message for: ${file}`));
           const suggestions = await this.getAIService().generateCommitMessage([fileDiff]);
           commitMessage =
             suggestions[0]?.message ?? this.generateFallbackCommitMessage(file, fileDiff);
-          console.log(chalk.gray(`🔍 DEBUG: AI generated message: "${commitMessage}"`));
-        } catch (error) {
-          console.log(chalk.gray(`🔍 DEBUG: AI generation failed, using fallback: ${error}`));
+        } catch {
           commitMessage = this.generateFallbackCommitMessage(file, fileDiff);
-          console.log(chalk.gray(`🔍 DEBUG: Using fallback message: "${commitMessage}"`));
         }
       }
 
-      console.log(chalk.gray(`🔍 DEBUG: About to commit with message: "${commitMessage}"`));
       await this.gitService.commit(commitMessage);
       console.log(chalk.green(`✅ Committed: ${commitMessage}`));
-      console.log(chalk.gray(`🔍 DEBUG: Successfully committed file: ${file}`));
 
       return true;
     } catch (error) {
       console.error(chalk.red(`  Failed to process ${file.split('/').pop()}: ${error}`));
-      console.log(chalk.gray(`🔍 DEBUG: Error processing file ${file}: ${error}`));
       return false;
     }
   };
@@ -475,19 +415,37 @@ export class CommitX {
     const fileName = file.toLowerCase();
     const baseName = file.split('/').pop()?.toLowerCase() ?? '';
     const fileType = getFileTypeFromExtension(fileName);
+    const fileExtension = `.${fileName.split('.').pop() ?? ''}`;
+
+    // Helper function to check if file is in build directory but is source code
+    const isSourceCodeInBuildDir = (filePath: string, ext: string): boolean => {
+      const buildDirPatterns = ['/build/', '/dist/', '/out/', '/target/'];
+      const isInBuildDir = buildDirPatterns.some((pattern) => filePath.includes(pattern));
+      const isSourceCode = PATTERNS.sourceCodeExtensions.includes(ext);
+      return isInBuildDir && isSourceCode;
+    };
 
     // Check for lock files (always use summary)
     if (PATTERNS.lockFiles.some((pattern) => fileName.includes(pattern))) {
       return true;
     }
 
-    // Check for generated files (always use summary)
+    // Check for generated files (always use summary) - more specific patterns
     if (PATTERNS.generatedFiles.some((pattern) => fileName.includes(pattern))) {
       return true;
     }
 
-    // Check for build directories (always use summary)
+    // Check for compiled files (always use summary) - more specific patterns
+    if (PATTERNS.compiledFiles.some((pattern) => fileName.includes(pattern))) {
+      return true;
+    }
+
+    // Check for build directories (always use summary) - but exclude source code
     if (PATTERNS.buildDirs.some((pattern) => fileName.includes(pattern))) {
+      // If it's source code in a build directory, don't use summary
+      if (isSourceCodeInBuildDir(file, fileExtension)) {
+        return false;
+      }
       return true;
     }
 
@@ -496,14 +454,14 @@ export class CommitX {
       return true;
     }
 
-    // Check for log and temporary files (always use summary)
+    // Check for log and temporary files (always use summary) - more specific patterns
     if (
       PATTERNS.logFiles.some((pattern) => baseName.includes(pattern) || fileName.includes(pattern))
     ) {
       return true;
     }
 
-    // Check for bundle files (always use summary)
+    // Check for bundle files (always use summary) - more specific patterns
     if (PATTERNS.bundleFiles.some((pattern) => fileName.includes(pattern))) {
       return true;
     }
@@ -525,8 +483,8 @@ export class CommitX {
 
     // Check for documentation files with many changes
     if (
-          totalChanges > 30 &&
-          ['markdown', 'unknown'].includes(fileType) &&
+      totalChanges > 30 &&
+      ['markdown', 'unknown'].includes(fileType) &&
       (fileName.endsWith('.md') || fileName.endsWith('.txt') || fileName.endsWith('.rst'))
     ) {
       return true;
@@ -578,45 +536,41 @@ export class CommitX {
       }
     }
 
-    // Check for generated files
-    if (
-          file.includes('.generated.') ||
-          file.includes('.auto.') ||
-          file.includes('.min.') ||
-          file.includes('.bundle.') ||
-      file.includes('.chunk.')
-    ) {
+    // Check for generated files - more specific patterns
+    if (PATTERNS.generatedFiles.some((pattern) => fileName.includes(pattern))) {
       return `Updated generated file ${fileName}`;
     }
 
-    // Check for compiled files
+    // Check for compiled files - more specific patterns
+    if (PATTERNS.compiledFiles.some((pattern) => fileName.includes(pattern))) {
+      return `Updated compiled ${fileName}`;
+    }
+
+    // Check for build directories - but exclude source code
+    const fileExtension = `.${fileName.split('.').pop() ?? ''}`;
+    const isSourceCodeInBuildDir = (filePath: string, ext: string): boolean => {
+      const buildDirPatterns = ['/build/', '/dist/', '/out/', '/target/'];
+      const isInBuildDir = buildDirPatterns.some((pattern) => filePath.includes(pattern));
+      const isSourceCode = PATTERNS.sourceCodeExtensions.includes(ext);
+      return isInBuildDir && isSourceCode;
+    };
+
     if (
-          file.includes('/dist/') ||
-          file.includes('/build/') ||
-          file.includes('/out/') ||
-      file.includes('/target/')
+      file.includes('/dist/') ||
+      file.includes('/out/') ||
+      file.includes('/target/') ||
+      (file.includes('/build/') && !isSourceCodeInBuildDir(file, fileExtension))
     ) {
       return `Updated compiled ${fileName}`;
     }
 
-    // Check for bundle files
-    if (
-      baseName.includes('.map') ||
-      baseName.includes('.bundle') ||
-      baseName.includes('.chunk') ||
-      baseName.includes('.vendor')
-    ) {
+    // Check for bundle files - more specific patterns
+    if (PATTERNS.bundleFiles.some((pattern) => baseName.includes(pattern))) {
       return `Updated bundled ${fileName}`;
     }
 
-    // Check for log and temporary files
-    if (
-      baseName.includes('.log') ||
-          file.includes('/logs/') ||
-      baseName.includes('.cache') ||
-      baseName.includes('.tmp') ||
-      baseName.includes('.temp')
-    ) {
+    // Check for log and temporary files - more specific patterns
+    if (PATTERNS.logFiles.some((pattern) => baseName.includes(pattern) || file.includes(pattern))) {
       return `Updated ${fileName}`;
     }
 
@@ -632,7 +586,7 @@ export class CommitX {
 
     // Check for style files
     if (
-          (baseName.endsWith('.css') || baseName.endsWith('.scss') || baseName.endsWith('.less')) &&
+      (baseName.endsWith('.css') || baseName.endsWith('.scss') || baseName.endsWith('.less')) &&
       totalChanges > 50
     ) {
       return `Updated ${fileName} styles`;
@@ -640,7 +594,7 @@ export class CommitX {
 
     // Check for documentation files
     if (
-          (baseName.endsWith('.md') || baseName.endsWith('.txt') || baseName.endsWith('.rst')) &&
+      (baseName.endsWith('.md') || baseName.endsWith('.txt') || baseName.endsWith('.rst')) &&
       totalChanges > 30
     ) {
       return `Updated ${fileName} documentation`;
