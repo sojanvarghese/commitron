@@ -286,15 +286,45 @@ export const sanitizeError = (error: any): string => {
 
 export const validateGitRepository = async (dir: string): Promise<ValidationResult> => {
   try {
-    const gitDir = path.join(dir, '.git');
-    await access(gitDir, fs.constants.R_OK);
+    // Resolve the directory path to handle symlinks and relative paths
+    let currentDir = path.resolve(dir);
+    const rootDir = path.parse(currentDir).root;
 
-    const headFile = path.join(gitDir, 'HEAD');
-    await access(headFile, fs.constants.R_OK);
+    // Traverse up the directory tree to find the .git directory
+    while (currentDir !== rootDir) {
+      const gitDir = path.join(currentDir, '.git');
 
+      try {
+        // Check if .git directory exists and is readable
+        await access(gitDir, fs.constants.R_OK);
+
+        // Check if HEAD file exists and is readable
+        const headFile = path.join(gitDir, 'HEAD');
+        await access(headFile, fs.constants.R_OK);
+
+        // Additional check: verify it's actually a git repository by checking if HEAD contains a ref
+        const headContent = await fs.promises.readFile(headFile, 'utf8');
+        if (!headContent.trim()) {
+          return {
+            isValid: false,
+            error: 'Invalid git repository: HEAD file is empty',
+          };
+        }
+
+        return {
+          isValid: true,
+          sanitizedValue: currentDir, // Return the actual git repository root
+        };
+      } catch {
+        // .git directory not found in current directory, try parent
+        currentDir = path.dirname(currentDir);
+      }
+    }
+
+    // No .git directory found in any parent directory
     return {
-      isValid: true,
-      sanitizedValue: dir,
+      isValid: false,
+      error: 'Not a valid git repository: No .git directory found in current or parent directories',
     };
   } catch (error) {
     return {
