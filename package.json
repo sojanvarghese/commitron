@@ -5,7 +5,6 @@
   "type": "module",
   "main": "dist/index.js",
   "bin": {
-    "commit-x": "dist/cli.js",
     "cx": "dist/cli.js"
   },
   "scripts": {
