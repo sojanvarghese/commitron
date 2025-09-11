@@ -353,6 +353,52 @@ program
     console.log('  yarn privacy                   # Show privacy information');
   });
 
+// Debug command
+program
+  .command('debug')
+  .description('Debug Git repository detection and environment')
+  .action(async (): Promise<void> => {
+    console.log(chalk.blue('\n🔍 CommitX Debug Information:\n'));
+
+    console.log(chalk.gray('Environment:'));
+    console.log(`  Current working directory: ${process.cwd()}`);
+    console.log(`  Node.js version: ${process.version}`);
+    console.log(`  Platform: ${process.platform}`);
+    console.log(`  Architecture: ${process.arch}`);
+
+    console.log(chalk.gray('\nGit repository detection:'));
+    try {
+      const { validateGitRepository } = await import('./utils/security.js');
+      const validation = await validateGitRepository(process.cwd());
+      console.log(`  Valid Git repository: ${validation.isValid ? '✅ Yes' : '❌ No'}`);
+      if (!validation.isValid) {
+        console.log(`  Error: ${validation.error}`);
+      } else {
+        console.log(`  Repository path: ${validation.sanitizedValue}`);
+      }
+    } catch (error) {
+      console.log(`  Error during validation: ${error}`);
+    }
+
+    console.log(chalk.gray('\nGit directory structure:'));
+    try {
+      const fs = await import('fs');
+      const path = await import('path');
+      const gitDir = path.join(process.cwd(), '.git');
+      console.log(`  .git directory exists: ${fs.existsSync(gitDir) ? '✅ Yes' : '❌ No'}`);
+      if (fs.existsSync(gitDir)) {
+        const headFile = path.join(gitDir, 'HEAD');
+        console.log(`  HEAD file exists: ${fs.existsSync(headFile) ? '✅ Yes' : '❌ No'}`);
+        if (fs.existsSync(headFile)) {
+          const headContent = fs.readFileSync(headFile, 'utf8');
+          console.log(`  HEAD content: ${headContent.trim()}`);
+        }
+      }
+    } catch (error) {
+      console.log(`  Error checking Git structure: ${error}`);
+    }
+  });
+
 // Default action for commit when no subcommand is provided
 program.action(async (): Promise<void> => {
   try {
