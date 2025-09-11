@@ -1,5 +1,4 @@
-import type { SimpleGit } from 'simple-git';
-import simpleGit from 'simple-git';
+import simpleGit, { type SimpleGit } from 'simple-git';
 import type { GitDiff, GitStatus } from '../types/common.js';
 import {
   validateAndSanitizePath,
@@ -15,7 +14,7 @@ import { ERROR_MESSAGES } from '../constants/messages.js';
 import { UI_CONSTANTS } from '../constants/ui.js';
 
 export class GitService {
-  private git: SimpleGit;
+  private readonly git: SimpleGit;
   private readonly errorHandler: ErrorHandler;
   private repositoryPath: string;
 
@@ -178,14 +177,14 @@ export class GitService {
               const fileSummary = diffSummary.files.find((f: any) => f.file === relativeFile);
               return {
                 file: validatedFile,
-                additions: fileSummary?.insertions || 0,
-                deletions: fileSummary?.deletions || 0,
-                changes: `Lock file updated: ${fileSummary?.insertions || 0} additions, ${fileSummary?.deletions || 0} deletions`,
+                additions: fileSummary?.insertions ?? 0,
+                deletions: fileSummary?.deletions ?? 0,
+                changes: `Lock file updated: ${fileSummary?.insertions ?? 0} additions, ${fileSummary?.deletions ?? 0} deletions`,
                 isNew:
                   status.created.includes(relativeFile) || status.not_added.includes(relativeFile),
                 isDeleted: status.deleted.includes(relativeFile),
                 isRenamed: status.renamed.some((r: any) => r.to === relativeFile),
-                oldPath: status.renamed.find((r: any) => r.to === relativeFile)?.from,
+                oldPath: status.renamed.find((r: any) => r.to === relativeFile)?.from ?? undefined,
               };
             }
 
@@ -201,13 +200,13 @@ export class GitService {
 
           return {
             file: validatedFile,
-            additions: fileSummary?.insertions || 0,
-            deletions: fileSummary?.deletions || 0,
-            changes: diffValidation.sanitizedValue!,
+            additions: fileSummary?.insertions ?? 0,
+            deletions: fileSummary?.deletions ?? 0,
+            changes: diffValidation.sanitizedValue ?? '',
             isNew: status.created.includes(relativeFile) || status.not_added.includes(relativeFile),
             isDeleted: status.deleted.includes(relativeFile),
             isRenamed: status.renamed.some((r: any) => r.to === relativeFile),
-            oldPath: status.renamed.find((r: any) => r.to === relativeFile)?.from,
+            oldPath: status.renamed.find((r: any) => r.to === relativeFile)?.from ?? undefined,
           };
         } catch {
           return {
@@ -218,7 +217,7 @@ export class GitService {
             isNew: status.created.includes(relativeFile) || status.not_added.includes(relativeFile),
             isDeleted: status.deleted.includes(relativeFile),
             isRenamed: status.renamed.some((r: any) => r.to === relativeFile),
-            oldPath: status.renamed.find((r: any) => r.to === relativeFile)?.from,
+            oldPath: status.renamed.find((r: any) => r.to === relativeFile)?.from ?? undefined,
           };
         }
       },
@@ -261,13 +260,13 @@ export class GitService {
 
             diffs.push({
               file,
-              additions: fileSummary?.insertions || 0,
-              deletions: fileSummary?.deletions || 0,
-              changes: diffValidation.sanitizedValue!,
+              additions: fileSummary?.insertions ?? 0,
+              deletions: fileSummary?.deletions ?? 0,
+              changes: diffValidation.sanitizedValue ?? '',
               isNew: status.created.includes(file),
               isDeleted: status.deleted.includes(file),
               isRenamed: status.renamed.some((r: any) => r.to === file),
-              oldPath: status.renamed.find((r: any) => r.to === file)?.from,
+              oldPath: status.renamed.find((r: any) => r.to === file)?.from ?? undefined,
             });
           } catch (error) {
             console.warn(`Failed to get diff for ${file}:`, error);
@@ -345,7 +344,10 @@ export class GitService {
             false
           );
         }
-        await withTimeout(this.git.add(pathValidation.sanitizedValue!), GIT_TIMEOUT_MS);
+
+        const sanitizedFile = pathValidation.sanitizedValue ?? '';
+
+        await withTimeout(this.git.add(sanitizedFile), GIT_TIMEOUT_MS);
       },
       { operation: 'stageFile', file }
     );
@@ -364,7 +366,9 @@ export class GitService {
           );
         }
 
-        await withTimeout(this.git.commit(messageValidation.sanitizedValue!), GIT_TIMEOUT_MS);
+        const sanitizedMessage = messageValidation.sanitizedValue ?? '';
+
+        await withTimeout(this.git.commit(sanitizedMessage), GIT_TIMEOUT_MS);
       },
       { operation: 'commit' }
     );
@@ -392,7 +396,7 @@ export class GitService {
   getLastCommitMessage = async (): Promise<string | null> => {
     try {
       const log = await this.git.log({ maxCount: 1 });
-      return log.latest?.message || null;
+      return log.latest?.message ?? null;
     } catch {
       return null;
     }
