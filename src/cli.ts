@@ -215,7 +215,6 @@ configCmd
     );
   });
 
-
 configCmd
   .command('reset')
   .description('Reset configuration to defaults')

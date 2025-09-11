@@ -1,10 +1,10 @@
 import type { ResourceLimits } from '../types/security.js';
 
 export const DEFAULT_LIMITS: ResourceLimits = {
-  maxFileSize: 10 * 1024 * 1024, // 10MB
-  maxDiffSize: 50000, // 50KB
-  maxApiRequestSize: 100000, // 100KB
-  timeoutMs: 30000, // Restored to 30 seconds for AI API calls
+  maxFileSize: 25 * 1024 * 1024, // 30 MB (based on average use cases)
+  maxDiffSize: 100_000, // 100 KB (increased from 50 KB)
+  maxApiRequestSize: 750_000, // ~750 KB (aligned with average TPM capacity)
+  timeoutMs: 25_000, // 15 seconds (middle ground from performance)
 };
 
 export const ALLOWED_CONFIG_KEYS = ['apiKey', 'model'];

@@ -53,10 +53,10 @@ export class CommitX {
       let processedCount = 0;
 
       // Optimize for multiple files: use batch processing when beneficial
-      if (unstagedFiles.length > 1 && !options.dryRun) {
+      if (unstagedFiles.length > 1) {
         processedCount = await this.commitFilesBatch(unstagedFiles, options);
       } else {
-        // Fall back to individual processing for dry runs or single files
+        // Fall back to individual processing for single files
         for (const file of unstagedFiles) {
           try {
             const success = await this.commitIndividualFile(file, options);
@@ -160,7 +160,8 @@ export class CommitX {
       const processedCount = await this.processBatchCommits(
         aiEligibleFiles,
         summaryFiles,
-        aiCommitMessages
+        aiCommitMessages,
+        options
       );
 
       if (skippedFiles.length > 0) {
@@ -271,40 +272,55 @@ export class CommitX {
   private readonly processBatchCommits = async (
     aiEligibleFiles: { file: string; diff: GitDiff }[],
     summaryFiles: { file: string; diff: GitDiff }[],
-    aiCommitMessages: { [filename: string]: string }
+    aiCommitMessages: { [filename: string]: string },
+    options: CommitOptions
   ): Promise<number> => {
-    const commitSpinner = ora('Committing files...').start();
+    const commitSpinner = ora(
+      options.dryRun ? 'Analyzing files...' : 'Committing files...'
+    ).start();
     let processedCount = 0;
 
     // Process AI-eligible files
-    for (const { file } of aiEligibleFiles) {
+    for (const { file, diff } of aiEligibleFiles) {
       try {
-        await this.gitService.stageFile(file);
-        const commitMessage = aiCommitMessages[file];
-        await this.gitService.commit(commitMessage);
-
         const fileName = file.split('/').pop() || file;
-        console.log(chalk.green(`✅ ${fileName}: ${commitMessage}`));
+        const commitMessage = aiCommitMessages[file];
+
+        if (options.dryRun) {
+          console.log(chalk.blue(`  Would stage and commit: ${fileName}`));
+          console.log(chalk.gray(`  Changes: +${diff.additions}/-${diff.deletions}`));
+          console.log(chalk.blue(`  Message: "${commitMessage}"`));
+        } else {
+          await this.gitService.stageFile(file);
+          await this.gitService.commit(commitMessage);
+          console.log(chalk.green(`✅ ${fileName}: ${commitMessage}`));
+        }
         processedCount++;
       } catch (error) {
         const fileName = file.split('/').pop() || file;
-        console.error(chalk.red(`  Failed to commit ${fileName}: ${error}`));
+        console.error(chalk.red(`  Failed to process ${fileName}: ${error}`));
       }
     }
 
     // Process summary files
     for (const { file, diff } of summaryFiles) {
       try {
-        await this.gitService.stageFile(file);
-        const commitMessage = this.generateSummaryCommitMessage(file, diff);
-        await this.gitService.commit(commitMessage);
-
         const fileName = file.split('/').pop() || file;
-        console.log(chalk.green(`✅ ${fileName}: ${commitMessage}`));
+        const commitMessage = this.generateSummaryCommitMessage(file, diff);
+
+        if (options.dryRun) {
+          console.log(chalk.blue(`  Would stage and commit: ${fileName}`));
+          console.log(chalk.gray(`  Changes: +${diff.additions}/-${diff.deletions}`));
+          console.log(chalk.blue(`  Message: "${commitMessage}"`));
+        } else {
+          await this.gitService.stageFile(file);
+          await this.gitService.commit(commitMessage);
+          console.log(chalk.green(`✅ ${fileName}: ${commitMessage}`));
+        }
         processedCount++;
       } catch (error) {
         const fileName = file.split('/').pop() || file;
-        console.error(chalk.red(`  Failed to commit ${fileName}: ${error}`));
+        console.error(chalk.red(`  Failed to process ${fileName}: ${error}`));
       }
     }
 
