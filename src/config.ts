@@ -119,7 +119,7 @@ export class ConfigManager {
         }
 
         this.config[key] = result.data[key];
-        this.saveConfig({});
+        void this.saveConfig({});
       },
       { operation: 'setConfig', key }
     );
@@ -149,6 +149,6 @@ export class ConfigManager {
 
   public reset = (): void => {
     this.config = { ...DEFAULT_CONFIG };
-    this.saveConfig(this.config);
+    void this.saveConfig(this.config);
   };
 }
