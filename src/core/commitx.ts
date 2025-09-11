@@ -293,7 +293,7 @@ export class CommitX {
         } else {
           await this.gitService.stageFile(file);
           // Small delay to prevent Git state conflicts
-          await new Promise((resolve) => setTimeout(resolve, 25));
+          await new Promise((resolve) => setTimeout(resolve, 50));
           await this.gitService.commit(commitMessage);
           console.log(chalk.green(`✅ ${fileName}: ${commitMessage}`));
         }
@@ -317,7 +317,7 @@ export class CommitX {
         } else {
           await this.gitService.stageFile(file);
           // Small delay to prevent Git state conflicts
-          await new Promise((resolve) => setTimeout(resolve, 25));
+          await new Promise((resolve) => setTimeout(resolve, 50));
           await this.gitService.commit(commitMessage);
           console.log(chalk.green(`✅ ${fileName}: ${commitMessage}`));
         }
