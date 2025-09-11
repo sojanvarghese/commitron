@@ -1,6 +1,5 @@
 import type { SimpleGit } from 'simple-git';
 import simpleGit from 'simple-git';
-import chalk from 'chalk';
 import type { GitDiff, GitStatus } from '../types/common.js';
 import {
   validateAndSanitizePath,
@@ -16,9 +15,9 @@ import { ERROR_MESSAGES } from '../constants/messages.js';
 import { UI_CONSTANTS } from '../constants/ui.js';
 
 export class GitService {
-  private readonly git: SimpleGit;
+  private git: SimpleGit;
   private readonly errorHandler: ErrorHandler;
-  private readonly repositoryPath: string;
+  private repositoryPath: string;
 
   constructor() {
     this.git = simpleGit();
@@ -26,13 +25,28 @@ export class GitService {
     this.repositoryPath = process.cwd();
   }
 
+  // Initialize the repository path by finding the actual git root
+  private async initializeRepositoryPath(): Promise<void> {
+    const validation = await validateGitRepository(this.repositoryPath);
+    if (validation.isValid) {
+      this.repositoryPath = validation.sanitizedValue!;
+      // Change working directory to the git repository root
+      process.chdir(this.repositoryPath);
+    }
+  }
+
   isGitRepository = async (): Promise<boolean> => {
     return withErrorHandling(
       async () => {
+        // Initialize repository path to find the actual git root
+        await this.initializeRepositoryPath();
+
         const validation = await validateGitRepository(this.repositoryPath);
         if (!validation.isValid) {
+          // Provide more detailed error information
+          const errorMessage = `Git repository validation failed for path: ${this.repositoryPath}\nError: ${validation.error}`;
           throw new SecureError(
-            validation.error!,
+            errorMessage,
             ErrorType.GIT_ERROR,
             { operation: 'isGitRepository' },
             false
