@@ -5,12 +5,12 @@ import { readFileSync } from 'fs';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import process from 'process';
-import gradient from 'gradient-string';
 import { ConfigManager } from './config.js';
 import type { CommitConfig } from './types/common.js';
 import { CommitMessageSchema, CommitConfigSchema } from './schemas/validation.js';
 import { ErrorType } from './types/error-handler.js';
 import { withErrorHandling, SecureError } from './utils/error-handler.js';
+import { vice, pastel } from 'gradient-string';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -34,7 +34,7 @@ const parseConfigValue = (value: string): any => {
 
 program
   .name('commit-x')
-  .description(gradient.rainbow('🚀 AI-powered Git commit assistant'))
+  .description(vice('🚀 AI-powered Git commit assistant\n'))
   .version(packageJson.version);
 
 // Main commit command
@@ -326,7 +326,7 @@ program
   .command('help-examples')
   .description('Show usage examples')
   .action((): void => {
-    console.log(gradient.rainbow('📚 CommitX Usage Examples:\n'));
+    console.log(pastel('📚 CommitX Usage Examples:\n'));
 
     console.log(chalk.yellow('Basic usage (Individual commits):'));
     console.log('  yarn commit                     # Process files individually');
