@@ -126,7 +126,7 @@ export class AIService {
 
             // Use parseBatchResponse for consistency
             const batchResults = this.parseBatchResponse(text, validatedDiffs, sanitizedDiffs);
-            const suggestions = batchResults[validatedDiffs[0]?.file] || [];
+            const suggestions = batchResults[validatedDiffs[0]?.file] ?? [];
 
             // Validate suggestions using Zod
             return this.validateAndImprove(suggestions);
@@ -422,16 +422,16 @@ export class AIService {
           const diff = diffs[i];
           const sanitizedDiff = sanitizedDiffs[i];
           const fileResult = parsed.files[sanitizedDiff.file];
-          if (fileResult && fileResult.message) {
+          if (fileResult?.message) {
             const suggestion: CommitSuggestion = {
               message: fileResult.message,
-              description: fileResult.description || '',
-              type: fileResult.type || '',
-              scope: fileResult.scope || '',
+              description: fileResult.description ?? '',
+              type: fileResult.type ?? '',
+              scope: fileResult.scope ?? '',
               confidence:
                 typeof fileResult.confidence === 'number'
                   ? fileResult.confidence
-                  : parseFloat(fileResult.confidence) || UI_CONSTANTS.CONFIDENCE_DEFAULT,
+                  : (parseFloat(fileResult.confidence) ?? UI_CONSTANTS.CONFIDENCE_DEFAULT),
             };
             results[diff.file] = this.validateAndImprove([suggestion]);
           } else {
@@ -449,14 +449,14 @@ export class AIService {
         // Single file format: { suggestions: [{ message, description, confidence }] }
         // Apply the same suggestion to all files
         const suggestions = parsed.suggestions.map((suggestion: any) => ({
-          message: suggestion.message || '',
-          description: suggestion.description || '',
-          type: suggestion.type || '',
-          scope: suggestion.scope || '',
+          message: suggestion.message ?? '',
+          description: suggestion.description ?? '',
+          type: suggestion.type ?? '',
+          scope: suggestion.scope ?? '',
           confidence:
             typeof suggestion.confidence === 'number'
               ? suggestion.confidence
-              : parseFloat(suggestion.confidence) || UI_CONSTANTS.CONFIDENCE_DEFAULT,
+              : (parseFloat(suggestion.confidence) ?? UI_CONSTANTS.CONFIDENCE_DEFAULT),
         }));
 
         for (const diff of diffs) {
