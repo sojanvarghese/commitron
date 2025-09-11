@@ -6,10 +6,9 @@ import {
   RECENT_ERROR_THRESHOLD_MS,
   DEFAULT_RETRY_ATTEMPTS,
   DEFAULT_RETRY_DELAY_MS,
+  ERROR_PATTERNS,
 } from '../constants/error-handler.js';
-import type { ErrorContext } from '../types/error-handler.js';
-import { ErrorType } from '../types/error-handler.js';
-import { ERROR_PATTERNS } from '../constants/error-handler.js';
+import { ErrorType, type ErrorContext } from '../types/error-handler.js';
 
 export class SecureError extends Error {
   public readonly type: ErrorType;
@@ -29,7 +28,7 @@ export class SecureError extends Error {
     this.type = type;
     this.context = { ...context, timestamp: new Date() };
     this.isRecoverable = isRecoverable;
-    this.userMessage = userMessage || this.getDefaultUserMessage();
+    this.userMessage = userMessage ?? this.getDefaultUserMessage();
   }
 
   private getDefaultUserMessage(): string {
@@ -99,7 +98,7 @@ export class ErrorHandler {
   };
 
   private readonly createSecureError = (error: any, context: ErrorContext): SecureError => {
-    const message = error?.message || 'Unknown error occurred';
+    const message = error?.message ?? 'Unknown error occurred';
     const sanitizedMessage = sanitizeError(message);
 
     // Use pattern matching for error type detection
