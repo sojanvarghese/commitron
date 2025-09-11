@@ -33,7 +33,7 @@ const parseConfigValue = (value: string): any => {
 };
 
 program
-  .name('commit-x')
+  .name('cx')
   .description(vice('🚀 AI-powered Git commit assistant\n'))
   .version(packageJson.version);
 
@@ -269,10 +269,8 @@ program
       config.saveConfig(answers);
 
       console.log(chalk.green('\n✅ Setup completed successfully!'));
-      console.log(
-        chalk.blue('You can now use "commit-x" or "cx" to start making AI-powered commits.')
-      );
-      console.log(chalk.gray('Use "commit-x config" to modify settings later.'));
+      console.log(chalk.blue('You can now use "cx" to start making AI-powered commits.'));
+      console.log(chalk.gray('Use "cx config" to modify settings later.'));
     } catch (error) {
       console.error(chalk.red(`Setup failed: ${error}`));
       process.exit(1);
@@ -329,28 +327,28 @@ program
     console.log(pastel('📚 CommitX Usage Examples:\n'));
 
     console.log(chalk.yellow('Basic usage (Individual commits):'));
-    console.log('  yarn commit                     # Process files individually');
-    console.log('  yarn commit:dry                 # Preview individual commits');
-    console.log('  yarn cx                         # Direct CLI access');
+    console.log('  cx                             # Process files individually');
+    console.log('  cx commit --dry-run            # Preview individual commits');
+    console.log('  cx commit                      # Direct CLI access');
     console.log('');
 
     console.log(chalk.yellow('Traditional workflow:'));
-    console.log('  yarn commit:all                 # Stage all files and commit together');
-    console.log('  yarn commit:all --push          # Stage all, commit, and push');
-    console.log('  yarn cx commit -m "fix: bug"    # Use custom message (traditional)');
+    console.log('  cx commit --all                # Stage all files and commit together');
+    console.log('  cx commit --all --push         # Stage all, commit, and push');
+    console.log('  cx commit -m "fix: bug"        # Use custom message (traditional)');
     console.log('');
 
     console.log(chalk.yellow('Status and information:'));
-    console.log('  yarn status                     # Show repository status');
-    console.log('  yarn diff                       # Show changes summary');
+    console.log('  cx status                      # Show repository status');
+    console.log('  cx diff                        # Show changes summary');
     console.log('');
 
     console.log(chalk.yellow('Configuration:'));
-    console.log('  yarn setup                     # Interactive setup');
-    console.log('  yarn config                    # View configuration');
-    console.log('  yarn config:set                # Set configuration values');
-    console.log('  yarn config:reset              # Reset configuration');
-    console.log('  yarn privacy                   # Show privacy information');
+    console.log('  cx setup                       # Interactive setup');
+    console.log('  cx config                      # View configuration');
+    console.log('  cx config set <key> <value>    # Set configuration values');
+    console.log('  cx config reset                # Reset configuration');
+    console.log('  cx privacy                     # Show privacy information');
   });
 
 // Debug command
@@ -415,7 +413,7 @@ program.action(async (): Promise<void> => {
 // Error handling
 program.on('command:*', () => {
   console.error(chalk.red(`Unknown command: ${program.args.join(' ')}`));
-  console.log(chalk.blue('Use "commit-x --help" for available commands'));
+  console.log(chalk.blue('Use "cx --help" for available commands'));
   process.exit(1);
 });
 
