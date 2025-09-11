@@ -7,7 +7,7 @@ export enum ErrorType {
   AI_SERVICE_ERROR = 'AI_SERVICE_ERROR',
   CONFIG_ERROR = 'CONFIG_ERROR',
   TIMEOUT_ERROR = 'TIMEOUT_ERROR',
-  UNKNOWN_ERROR = 'UNKNOWN_ERROR'
+  UNKNOWN_ERROR = 'UNKNOWN_ERROR',
 }
 
 export interface ErrorContext {
