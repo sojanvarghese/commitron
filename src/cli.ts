@@ -266,7 +266,7 @@ program
         },
       ]);
 
-      config.saveConfig(answers);
+      await config.saveConfig(answers);
 
       console.log(chalk.green('\n✅ Setup completed successfully!'));
       console.log(chalk.blue('You can now use "cx" to start making AI-powered commits.'));
@@ -420,7 +420,7 @@ program.on('command:*', () => {
 // Parse command line arguments
 if (process.argv.length === 2) {
   // No arguments provided, run default commit
-  (async () => {
+  void (async () => {
     try {
       // Import only when needed to avoid loading heavy dependencies
       const { CommitX } = await import('./core/commitx.js');
