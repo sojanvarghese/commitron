@@ -37,7 +37,6 @@ export interface CommitOptions {
   all?: boolean; // Stage all files and commit together (traditional workflow)
 }
 
-
 export interface PlaywrightPatterns {
   isPOM: boolean;
   isSpec: boolean;
