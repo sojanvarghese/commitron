@@ -435,4 +435,29 @@ export class GitService {
         return UI_CONSTANTS.FILE_STATUS.MODIFIED;
     }
   };
+
+  // Wait for Git to naturally release the lock file
+  waitForLockRelease = async (maxWaitMs: number = 2000): Promise<void> => {
+    const { access } = await import('fs/promises');
+    const lockPath = `${this.repositoryPath}/.git/index.lock`;
+    const checkInterval = 10; // Check every 10ms for very fast responsiveness
+    const maxChecks = Math.floor(maxWaitMs / checkInterval);
+
+    for (let i = 0; i < maxChecks; i++) {
+      try {
+        await access(lockPath);
+        // Lock file exists, wait a bit
+        await new Promise((resolve) => setTimeout(resolve, checkInterval));
+      } catch {
+        // Lock file doesn't exist, Git has released it
+        // Add a tiny buffer to ensure Git is completely done
+        await new Promise((resolve) => setTimeout(resolve, 5));
+        return;
+      }
+    }
+
+    // If we get here, lock file still exists after timeout
+    // This is unusual but we should continue anyway
+    console.warn('⚠️  Git lock file persisted longer than expected');
+  };
 }
