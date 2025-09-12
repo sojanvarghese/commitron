@@ -292,15 +292,23 @@ export class CommitX {
           console.log(chalk.blue(`  Message: "${commitMessage}"`));
         } else {
           await this.gitService.stageFile(file);
-          // Small delay to prevent Git state conflicts
-          await new Promise((resolve) => setTimeout(resolve, 50));
+          // Wait for Git to release any lock files naturally
+          await this.gitService.waitForLockRelease();
           await this.gitService.commit(commitMessage);
           console.log(chalk.green(`✅ ${fileName}: ${commitMessage}`));
         }
         processedCount++;
       } catch (error) {
         const fileName = file.split('/').pop() ?? file;
-        console.error(chalk.red(`  Failed to process ${fileName}: ${error}`));
+        const errorMessage = error instanceof Error ? error.message : String(error);
+
+        // Check if it's a Git lock file error and provide helpful guidance
+        if (errorMessage.includes('index.lock') || errorMessage.includes('File exists')) {
+          console.error(chalk.red(`  Failed to process ${fileName}: Git lock file detected`));
+          console.error(chalk.yellow(`  💡 Try running: rm -f .git/index.lock`));
+        } else {
+          console.error(chalk.red(`  Failed to process ${fileName}: ${errorMessage}`));
+        }
       }
     }
 
@@ -316,15 +324,23 @@ export class CommitX {
           console.log(chalk.blue(`  Message: "${commitMessage}"`));
         } else {
           await this.gitService.stageFile(file);
-          // Small delay to prevent Git state conflicts
-          await new Promise((resolve) => setTimeout(resolve, 50));
+          // Wait for Git to release any lock files naturally
+          await this.gitService.waitForLockRelease();
           await this.gitService.commit(commitMessage);
           console.log(chalk.green(`✅ ${fileName}: ${commitMessage}`));
         }
         processedCount++;
       } catch (error) {
         const fileName = file.split('/').pop() ?? file;
-        console.error(chalk.red(`  Failed to process ${fileName}: ${error}`));
+        const errorMessage = error instanceof Error ? error.message : String(error);
+
+        // Check if it's a Git lock file error and provide helpful guidance
+        if (errorMessage.includes('index.lock') || errorMessage.includes('File exists')) {
+          console.error(chalk.red(`  Failed to process ${fileName}: Git lock file detected`));
+          console.error(chalk.yellow(`  💡 Try running: rm -f .git/index.lock`));
+        } else {
+          console.error(chalk.red(`  Failed to process ${fileName}: ${errorMessage}`));
+        }
       }
     }
 
@@ -406,7 +422,16 @@ export class CommitX {
 
       return true;
     } catch (error) {
-      console.error(chalk.red(`  Failed to process ${file.split('/').pop()}: ${error}`));
+      const fileName = file.split('/').pop() ?? file;
+      const errorMessage = error instanceof Error ? error.message : String(error);
+
+      // Check if it's a Git lock file error and provide helpful guidance
+      if (errorMessage.includes('index.lock') || errorMessage.includes('File exists')) {
+        console.error(chalk.red(`  Failed to process ${fileName}: Git lock file detected`));
+        console.error(chalk.yellow(`  💡 Try running: rm -f .git/index.lock`));
+      } else {
+        console.error(chalk.red(`  Failed to process ${fileName}: ${errorMessage}`));
+      }
       return false;
     }
   };
