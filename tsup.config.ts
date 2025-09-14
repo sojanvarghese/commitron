@@ -7,9 +7,9 @@ export default defineConfig({
   outDir: 'dist',
   clean: true,
   dts: true,
-  sourcemap: true,
-  minify: false, // Keep readable for CLI debugging
-  splitting: false, // Single bundle for CLI
+  sourcemap: 'inline', // Use inline sourcemaps for better performance
+  minify: true, // Enable minification for smaller bundles
+  splitting: true, // Enable code splitting for better chunk loading
   treeshake: true,
   external: [
     // Keep these as external dependencies
@@ -19,11 +19,18 @@ export default defineConfig({
     'inquirer',
     'ora',
     'simple-git',
+    'gradient-string',
+    'ts-pattern',
+    'zod',
   ],
   esbuildOptions(options) {
-    options.banner = {
-      js: '#!/usr/bin/env node',
-    };
+    // Enable advanced optimizations
+    options.treeShaking = true;
+    options.minifyIdentifiers = true;
+    options.minifySyntax = true;
+    options.minifyWhitespace = true;
+    // Optimize for size and startup time
+    options.mangleProps = /^_/;
   },
   onSuccess: 'echo "Build completed successfully!"',
 });
