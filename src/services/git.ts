@@ -477,7 +477,7 @@ export class GitService {
   };
 
   // Wait for Git to naturally release the lock file
-  waitForLockRelease = async (maxWaitMs: number = 2000): Promise<void> => {
+  waitForLockRelease = async (maxWaitMs: number = 250): Promise<void> => {
     const { access } = await import('fs/promises');
     const lockPath = `${this.repositoryPath}/.git/index.lock`;
     const checkInterval = 10; // Check every 10ms for very fast responsiveness
