@@ -1,10 +1,19 @@
-export { CommitX } from './core/commitx.js';
-export { GitService } from './services/git.js';
-export { AIService } from './services/ai.js';
-export { ConfigManager } from './config.js';
-export * from './types/common.js';
+// Lazy exports for better tree shaking and startup performance
+export const CommitX = () => import('./core/commitx.js').then(m => m.CommitX);
+export const GitService = () => import('./services/git.js').then(m => m.GitService);
+export const AIService = () => import('./services/ai.js').then(m => m.AIService);
+export const ConfigManager = () => import('./config.js').then(m => m.ConfigManager);
 
-// Main entry point for programmatic usage
-import { CommitX } from './core/commitx.js';
+// Type exports are compile-time only, so they don't affect runtime performance
+export type * from './types/common.js';
 
-export default CommitX;
+// Performance monitoring
+export { PerformanceMonitor, withPerformanceTracking, logMemoryUsage } from './utils/performance.js';
+
+// Main entry point for programmatic usage with lazy loading
+const getCommitX = async () => {
+  const { CommitX } = await import('./core/commitx.js');
+  return CommitX;
+};
+
+export default getCommitX;
