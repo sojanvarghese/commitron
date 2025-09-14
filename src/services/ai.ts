@@ -1,4 +1,4 @@
-import { GoogleGenerativeAI } from '@google/generative-ai';
+import { GoogleGenerativeAI, type GenerativeModel } from '@google/generative-ai';
 import type { CommitSuggestion, GitDiff } from '../types/common.js';
 import { ConfigManager } from '../config.js';
 import { GitDiffSchema, CommitSuggestionSchema, DiffContentSchema } from '../schemas/validation.js';
@@ -21,10 +21,52 @@ import {
   type SanitizedDiff,
 } from '../utils/data-sanitization.js';
 
+// Simple LRU cache for AI responses
+class LRUCache<K, V> {
+  private readonly cache = new Map<K, V>();
+  private readonly maxSize: number;
+
+  constructor(maxSize: number = 50) {
+    this.maxSize = maxSize;
+  }
+
+  get(key: K): V | undefined {
+    const value = this.cache.get(key);
+    if (value !== undefined) {
+      // Move to end (most recently used)
+      this.cache.delete(key);
+      this.cache.set(key, value);
+    }
+    return value;
+  }
+
+  set(key: K, value: V): void {
+    if (this.cache.has(key)) {
+      this.cache.delete(key);
+    } else if (this.cache.size >= this.maxSize) {
+      // Remove least recently used
+      const firstKey = this.cache.keys().next().value as K;
+      this.cache.delete(firstKey);
+    }
+    this.cache.set(key, value);
+  }
+
+  clear(): void {
+    this.cache.clear();
+  }
+
+  size(): number {
+    return this.cache.size;
+  }
+}
+
 export class AIService {
   private readonly genAI: GoogleGenerativeAI;
   private readonly config: ConfigManager;
   private readonly errorHandler: ErrorHandler;
+  private readonly responseCache = new LRUCache<string, CommitSuggestion[]>(100);
+  private readonly batchCache = new LRUCache<string, { [filename: string]: CommitSuggestion[] }>(50);
+  private model: GenerativeModel | null = null; // Cache the model instance
 
   constructor() {
     this.config = ConfigManager.getInstance();
@@ -45,6 +87,23 @@ export class AIService {
     this.genAI = new GoogleGenerativeAI(apiKey);
   }
 
+  private getModel(): GenerativeModel {
+    if (!this.model) {
+      const config = this.config.getConfig();
+      this.model = this.genAI.getGenerativeModel({
+        model: config.model ?? AI_DEFAULT_MODEL,
+      });
+    }
+    return this.model;
+  }
+
+  // Generate cache key from diffs for deduplication
+  private generateCacheKey(diffs: GitDiff[]): string {
+    return diffs
+      .map((diff) => `${diff.file}:${diff.additions}:${diff.deletions}:${diff.changes?.substring(0, 100)}`)
+      .join('|');
+  }
+
   generateCommitMessage = async (diffs: GitDiff[]): Promise<CommitSuggestion[]> => {
     return withRetry(
       async () => {
@@ -57,6 +116,13 @@ export class AIService {
                 { operation: 'generateCommitMessage' },
                 true
               );
+            }
+
+            // Check cache first
+            const cacheKey = this.generateCacheKey(diffs);
+            const cached = this.responseCache.get(cacheKey);
+            if (cached) {
+              return cached;
             }
 
             // Filter out sensitive files and validate diffs
@@ -102,10 +168,7 @@ export class AIService {
               );
             }
 
-            const config = this.config.getConfig();
-            const model = this.genAI.getGenerativeModel({
-              model: config.model ?? AI_DEFAULT_MODEL,
-            });
+            const model = this.getModel();
 
             const { prompt, sanitizedDiffs } = this.buildJsonPrompt(validatedDiffs);
 
@@ -118,18 +181,23 @@ export class AIService {
               );
             }
 
-            const { response } = await withTimeout(
+            const result = await withTimeout(
               model.generateContent(prompt),
               DEFAULT_LIMITS.timeoutMs
             );
-            const text = response.text();
+            const text = result.response.text();
 
             // Use parseBatchResponse for consistency
             const batchResults = this.parseBatchResponse(text, validatedDiffs, sanitizedDiffs);
             const suggestions = batchResults[validatedDiffs[0]?.file] ?? [];
 
             // Validate suggestions using Zod
-            return this.validateAndImprove(suggestions);
+            const validatedSuggestions = this.validateAndImprove(suggestions);
+
+            // Cache the result
+            this.responseCache.set(cacheKey, validatedSuggestions);
+
+            return validatedSuggestions;
           },
           { operation: 'generateCommitMessage' }
         );
@@ -154,6 +222,13 @@ export class AIService {
                 { operation: 'generateBatchCommitMessages' },
                 true
               );
+            }
+
+            // Check batch cache first
+            const cacheKey = this.generateCacheKey(diffs);
+            const cached = this.batchCache.get(cacheKey);
+            if (cached) {
+              return cached;
             }
 
             // Filter out sensitive files and validate diffs
@@ -199,10 +274,7 @@ export class AIService {
               );
             }
 
-            const config = this.config.getConfig();
-            const model = this.genAI.getGenerativeModel({
-              model: config.model ?? AI_DEFAULT_MODEL,
-            });
+            const model = this.getModel();
 
             const { prompt, sanitizedDiffs } = this.buildJsonPrompt(validatedDiffs);
 
@@ -215,12 +287,15 @@ export class AIService {
               );
             }
 
-            const { response } = await withTimeout(
+            const result = await withTimeout(
               model.generateContent(prompt),
               DEFAULT_LIMITS.timeoutMs
             );
-            const text = response.text();
+            const text = result.response.text();
             const batchResults = this.parseBatchResponse(text, validatedDiffs, sanitizedDiffs);
+
+            // Cache the batch result
+            this.batchCache.set(cacheKey, batchResults);
 
             return batchResults;
           },
@@ -560,7 +635,7 @@ export class AIService {
     for (const line of lines) {
       if (
         line.match(COMMIT_MESSAGE_PATTERNS.NUMBERED_PATTERN) ||
-        COMMIT_MESSAGE_PATTERNS.AVOID_PREFIXES.some((prefix: string) => line.includes(prefix))
+        COMMIT_MESSAGE_PATTERNS.AVOID_PREFIXES.some((prefix) => line.includes(prefix))
       ) {
         const message = line.replace(COMMIT_MESSAGE_PATTERNS.NUMBERED_PATTERN, '').trim();
         if (message && message.length > 5) {
