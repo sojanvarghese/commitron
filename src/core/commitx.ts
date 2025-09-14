@@ -14,21 +14,21 @@ import { FILE_TYPE_CONFIGS, PATTERNS } from '../constants/commitx.js';
 
 export class CommitX {
   private readonly gitService: GitService;
-  private aiService: AIService | null = null;
+  private static aiServiceInstance: AIService | null = null;
 
   constructor() {
     this.gitService = new GitService();
   }
 
   private getAIService(): AIService {
-    if (!this.aiService) {
+    if (!CommitX.aiServiceInstance) {
       try {
-        this.aiService = new AIService();
+        CommitX.aiServiceInstance = new AIService();
       } catch (error) {
         throw new Error(`Failed to initialize AI service: ${error}`);
       }
     }
-    return this.aiService;
+    return CommitX.aiServiceInstance;
   }
 
   commit = async (options: CommitOptions = {}): Promise<void> => {
@@ -183,29 +183,47 @@ export class CommitX {
     const summaryFiles: { file: string; diff: GitDiff }[] = [];
     const skippedFiles: string[] = [];
 
-    for (const file of files) {
-      try {
-        const fileName = file.split('/').pop() ?? file;
-        const fileDiff = await this.gitService.getFileDiff(file, false);
-        const totalChanges = fileDiff.additions + fileDiff.deletions;
+    // Process files in parallel for better performance
+    const BATCH_SIZE = 10; // Process in batches to avoid overwhelming the system
+    const batches = [];
+    for (let i = 0; i < files.length; i += BATCH_SIZE) {
+      batches.push(files.slice(i, i + BATCH_SIZE));
+    }
 
-        // Skip truly empty files
-        if (this.shouldSkipFile(fileDiff, totalChanges)) {
-          this.logSkippedFile(fileName, fileDiff);
-          skippedFiles.push(file);
-          continue;
-        }
+    for (const batch of batches) {
+      const results = await Promise.allSettled(
+        batch.map(async (file) => {
+          const fileName = file.split('/').pop() ?? file;
+          const fileDiff = await this.gitService.getFileDiff(file, false);
+          const totalChanges = fileDiff.additions + fileDiff.deletions;
+          return { file, fileName, fileDiff, totalChanges };
+        })
+      );
 
-        // Categorize files
-        if (this.shouldUseSummaryMessage(file, totalChanges)) {
-          summaryFiles.push({ file, diff: fileDiff });
+      for (const result of results) {
+        if (result.status === 'fulfilled') {
+          const { file, fileName, fileDiff, totalChanges } = result.value;
+
+          // Skip truly empty files
+          if (this.shouldSkipFile(fileDiff, totalChanges)) {
+            this.logSkippedFile(fileName, fileDiff);
+            skippedFiles.push(file);
+            continue;
+          }
+
+          // Categorize files
+          if (this.shouldUseSummaryMessage(file, totalChanges)) {
+            summaryFiles.push({ file, diff: fileDiff });
+          } else {
+            aiEligibleFiles.push({ file, diff: fileDiff });
+          }
         } else {
-          aiEligibleFiles.push({ file, diff: fileDiff });
+          // Handle rejected promises
+          const file = batch[results.indexOf(result)];
+          const fileName = file.split('/').pop() ?? file;
+          console.error(`Failed to analyze ${fileName}: ${result.reason}`);
+          skippedFiles.push(file);
         }
-      } catch (error) {
-        const fileName = file.split('/').pop() ?? file;
-        console.error(chalk.red(`  Failed to analyze ${fileName}: ${error}`));
-        skippedFiles.push(file);
       }
     }
 
