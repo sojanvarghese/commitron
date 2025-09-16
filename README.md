@@ -38,7 +38,7 @@ yarn global add file:.
 
 ```bash
 # Interactive setup
-commit-x setup
+cx setup
 
 # Or set API key directly
 export GEMINI_API_KEY="your_api_key_here"
@@ -48,40 +48,55 @@ export GEMINI_API_KEY="your_api_key_here"
 
 ```bash
 # Process files individually (recommended)
-commit-x
+cx
 
 # Traditional workflow
-commit-x commit --all
+cx commit --all
 
 # Preview changes
-commit-x commit --dry-run
+cx commit --dry-run
 ```
 
 ## 📖 Commands
 
 | Command | Description |
 |---------|-------------|
-| `commit-x` | Process files individually with AI |
-| `commit-x commit --all` | Stage all files and commit together |
-| `commit-x commit --dry-run` | Preview commits without executing |
-| `commit-x status` | Show repository status |
-| `commit-x diff` | Show changes summary (staged changes only) |
-| `commit-x config` | View configuration |
-| `commit-x config set <key> <value>` | Set configuration value |
-| `commit-x config reset` | Reset configuration to defaults |
-| `commit-x setup` | Interactive setup |
+| `cx` | Process files individually with AI |
+| `cx commit --all` | Stage all files and commit together |
+| `cx commit --dry-run` | Preview commits without executing |
+| `cx commit --push` | Commit and push changes |
+| `cx commit -m "message"` | Use custom commit message |
+| `cx status` | Show repository status |
+| `cx diff` | Show changes summary (staged changes only) |
+| `cx config` | View configuration |
+| `cx config set <key> <value>` | Set configuration value |
+| `cx config reset` | Reset configuration to defaults |
+| `cx setup` | Interactive setup |
+| `cx privacy` | Show privacy information |
+| `cx debug` | Debug repository detection |
+| `cx help-examples` | Show usage examples |
+
+### Command Options
+
+#### Commit Command Options
+- `--all` - Stage all files and commit together (traditional workflow)
+- `--dry-run` - Show what would be committed without actually committing
+- `--push` - Push changes after committing (disabled in individual mode)
+- `--interactive` - Use interactive mode (for traditional workflow only)
+- `--no-interactive` - Use non-interactive mode (default for individual commits)
+- `-m, --message <message>` - Use provided commit message instead of generating one
 
 ## ⚙️ Configuration
 
 ```bash
 # View current configuration
-commit-x config
+cx config
 
 # Set configuration values
-commit-x config set model gemini-1.5-flash
+cx config set model gemini-1.5-flash
 
 # Reset to defaults
-commit-x config reset
+cx config reset
 ```
 
 ### Configuration Options
@@ -97,11 +112,19 @@ commit-x config reset
 | Script | Description |
 |--------|-------------|
 | `yarn build` | Compile TypeScript |
-| `yarn dev` | Run in development mode |
+| `yarn dev` | Run CLI directly (development) |
 | `yarn lint` | Run ESLint |
 | `yarn format` | Format code with Prettier |
 | `yarn commit` | Process files individually |
 | `yarn commit:all` | Stage all files and commit together |
+| `yarn commit:dry` | Preview commits without executing |
+| `yarn status` | Show repository status |
+| `yarn diff` | Show changes summary |
+| `yarn config:get` | Get configuration values |
+| `yarn config:model` | Set AI model |
+| `yarn config:reset` | Reset configuration |
+| `yarn setup` | Interactive setup |
+| `yarn help` | Show usage examples |
 
 ## License
 
