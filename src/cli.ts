@@ -18,7 +18,7 @@ import { PERFORMANCE_FLAGS } from './constants/performance.js';
 import type * as InquirerType from 'inquirer';
 type Inquirer = typeof InquirerType;
 
-// Log startup time in development
+// Log startup time
 if (PERFORMANCE_FLAGS.ENABLE_PERFORMANCE_MONITORING) {
   process.nextTick(() => {
     const startupTime = performance.now() - startupStart;
