@@ -524,9 +524,9 @@ export class CommitX {
       return true;
     }
 
-    // Check for documentation files with many changes
+    // Check for documentation files - use summary for all markdown files with > 10 changes
     if (
-      totalChanges > 30 &&
+      totalChanges > 10 &&
       ['markdown', 'unknown'].includes(fileType) &&
       (fileName.endsWith('.md') || fileName.endsWith('.txt') || fileName.endsWith('.rst'))
     ) {
