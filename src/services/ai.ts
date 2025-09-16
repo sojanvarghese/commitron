@@ -6,6 +6,7 @@ import { withTimeout } from '../utils/security.js';
 import { ErrorType } from '../types/error-handler.js';
 import { ErrorHandler, withErrorHandling, withRetry, SecureError } from '../utils/error-handler.js';
 import { DEFAULT_LIMITS } from '../constants/security.js';
+import { calculateAITimeout } from '../utils/timeout.js';
 import {
   AI_RETRY_ATTEMPTS,
   AI_RETRY_DELAY_MS,
@@ -181,9 +182,15 @@ export class AIService {
               );
             }
 
+            const totalChanges = validatedDiffs.reduce((sum, diff) => sum + diff.additions + diff.deletions, 0);
+            const aiTimeout = calculateAITimeout({
+              diffSize: prompt.length,
+              fileCount: validatedDiffs.length,
+              totalChanges
+            });
             const result = await withTimeout(
               model.generateContent(prompt),
-              DEFAULT_LIMITS.timeoutMs
+              aiTimeout
             );
             const text = result.response.text();
 
@@ -287,9 +294,15 @@ export class AIService {
               );
             }
 
+            const totalChanges = validatedDiffs.reduce((sum, diff) => sum + diff.additions + diff.deletions, 0);
+            const aiTimeout = calculateAITimeout({
+              diffSize: prompt.length,
+              fileCount: validatedDiffs.length,
+              totalChanges
+            });
             const result = await withTimeout(
               model.generateContent(prompt),
-              DEFAULT_LIMITS.timeoutMs
+              aiTimeout
             );
             const text = result.response.text();
             const batchResults = this.parseBatchResponse(text, validatedDiffs, sanitizedDiffs);
