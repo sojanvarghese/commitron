@@ -1,5 +1,7 @@
 // Performance monitoring and optimization utilities
 
+import { PERFORMANCE_FLAGS } from "../constants/performance";
+
 export class PerformanceMonitor {
   private static instance: PerformanceMonitor;
   private readonly startTimes = new Map<string, number>();
@@ -48,12 +50,7 @@ export class PerformanceMonitor {
   }
 
   public logMetrics(): void {
-    if (process.env.NODE_ENV === 'development') {
-      console.log('\n📊 Performance Metrics:');
-      for (const [operation, metrics] of this.metrics) {
-        console.log(`  ${operation}: ${metrics.avgTime.toFixed(2)}ms (${metrics.count} calls)`);
-      }
-    }
+    // Performance monitoring disabled (development mode removed)
   }
 
   public clear(): void {
@@ -73,8 +70,8 @@ export const withPerformanceTracking = async <T>(
     const result = await fn();
     const duration = monitor.endTimer(operation);
 
-    // Log slow operations in development
-    if (process.env.NODE_ENV === 'development' && duration > 1000) {
+    // Log slow operations if monitoring enabled
+    if (PERFORMANCE_FLAGS.ENABLE_PERFORMANCE_MONITORING && duration > 1000) {
       console.warn(`⚠️  Slow operation detected: ${operation} took ${duration.toFixed(2)}ms`);
     }
 
@@ -87,7 +84,7 @@ export const withPerformanceTracking = async <T>(
 
 // Memory usage monitoring
 export const logMemoryUsage = (label?: string): void => {
-  if (process.env.NODE_ENV === 'development') {
+  if (PERFORMANCE_FLAGS.ENABLE_PERFORMANCE_MONITORING) {
     const used = process.memoryUsage();
     const formatMB = (bytes: number): number => Math.round(bytes / 1024 / 1024 * 100) / 100;
 
@@ -101,7 +98,7 @@ export const logMemoryUsage = (label?: string): void => {
 
 // Force garbage collection if available
 export const forceGarbageCollection = (): void => {
-  if (global.gc && process.env.NODE_ENV === 'development') {
+  if (global.gc && PERFORMANCE_FLAGS.ENABLE_PERFORMANCE_MONITORING) {
     global.gc();
   }
 };
