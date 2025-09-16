@@ -9,7 +9,8 @@ import {
 } from '../utils/security.js';
 import { ErrorType } from '../types/error-handler.js';
 import { ErrorHandler, withErrorHandling, withRetry, SecureError } from '../utils/error-handler.js';
-import { GIT_TIMEOUT_MS, GIT_RETRY_ATTEMPTS, GIT_RETRY_DELAY_MS } from '../constants/git.js';
+import { GIT_RETRY_ATTEMPTS, GIT_RETRY_DELAY_MS } from '../constants/git.js';
+import { calculateGitTimeout } from '../utils/timeout.js';
 import { ERROR_MESSAGES } from '../constants/messages.js';
 import { UI_CONSTANTS } from '../constants/ui.js';
 
@@ -82,7 +83,7 @@ export class GitService {
           return this.cache.status.data;
         }
 
-        const status = await withTimeout(this.git.status(), GIT_TIMEOUT_MS);
+        const status = await withTimeout(this.git.status(), calculateGitTimeout({}));
 
         const staged = this.validateFilePaths(status.staged);
         const unstaged = this.validateFilePaths(status.modified);
@@ -122,7 +123,7 @@ export class GitService {
   getUnstagedFiles = async (): Promise<string[]> => {
     return withErrorHandling(
       async () => {
-        const status = await withTimeout(this.git.status(), GIT_TIMEOUT_MS);
+        const status = await withTimeout(this.git.status(), calculateGitTimeout({}));
 
         const allFiles = [...status.modified, ...status.not_added, ...status.deleted];
         return this.validateFilePaths(allFiles);
@@ -145,7 +146,7 @@ export class GitService {
         }
 
         const validatedFile = pathValidation.sanitizedValue;
-        const status = await withTimeout(this.git.status(), GIT_TIMEOUT_MS);
+        const status = await withTimeout(this.git.status(), calculateGitTimeout({}));
 
         // Convert absolute path to relative path for comparison with git status
         const relativeFile = file.startsWith(this.repositoryPath)
@@ -189,8 +190,9 @@ export class GitService {
           }
 
           const diffArgs = staged ? ['--cached', validatedFile] : [validatedFile];
-          const diff = await withTimeout(this.git.diff(diffArgs), GIT_TIMEOUT_MS);
-          const diffSummary = await withTimeout(this.git.diffSummary(diffArgs), GIT_TIMEOUT_MS);
+          const diffTimeout = calculateGitTimeout({ diffSize: 0 }); // Will be adjusted after getting diff
+          const diff = await withTimeout(this.git.diff(diffArgs), diffTimeout);
+          const diffSummary = await withTimeout(this.git.diffSummary(diffArgs), diffTimeout);
 
           const diffValidation = validateDiffSize(diff);
           if (!diffValidation.isValid) {
@@ -255,7 +257,7 @@ export class GitService {
   getStagedDiff = async (): Promise<GitDiff[]> => {
     return withErrorHandling(
       async () => {
-        const status = await withTimeout(this.git.status(), GIT_TIMEOUT_MS);
+        const status = await withTimeout(this.git.status(), calculateGitTimeout({}));
 
         if (status.staged.length === 0) {
           throw new SecureError(
@@ -271,10 +273,11 @@ export class GitService {
 
         for (const file of validatedFiles) {
           try {
-            const diff = await withTimeout(this.git.diff(['--cached', file]), GIT_TIMEOUT_MS);
+            const diffTimeout = calculateGitTimeout({ diffSize: 0 });
+            const diff = await withTimeout(this.git.diff(['--cached', file]), diffTimeout);
             const diffSummary = await withTimeout(
               this.git.diffSummary(['--cached', file]),
-              GIT_TIMEOUT_MS
+              diffTimeout
             );
 
             const diffValidation = validateDiffSize(diff);
@@ -335,7 +338,7 @@ export class GitService {
   stageAll = async (): Promise<void> => {
     return withErrorHandling(
       async () => {
-        await withTimeout(this.git.add('.'), GIT_TIMEOUT_MS);
+        await withTimeout(this.git.add('.'), calculateGitTimeout({}));
         this.clearCache(); // Clear cache after staging
       },
       { operation: 'stageAll' }
@@ -354,7 +357,7 @@ export class GitService {
             true
           );
         }
-        await withTimeout(this.git.add(validatedFiles), GIT_TIMEOUT_MS);
+        await withTimeout(this.git.add(validatedFiles), calculateGitTimeout({}));
       },
       { operation: 'stageFiles' }
     );
@@ -375,7 +378,7 @@ export class GitService {
 
         const sanitizedFile = pathValidation.sanitizedValue;
 
-        await withTimeout(this.git.add(sanitizedFile), GIT_TIMEOUT_MS);
+        await withTimeout(this.git.add(sanitizedFile), calculateGitTimeout({}));
         this.clearCache(); // Clear cache after staging
       },
       { operation: 'stageFile', file }
@@ -397,7 +400,7 @@ export class GitService {
 
         const sanitizedMessage = messageValidation.sanitizedValue;
 
-        await withTimeout(this.git.commit(sanitizedMessage), GIT_TIMEOUT_MS);
+        await withTimeout(this.git.commit(sanitizedMessage), calculateGitTimeout({}));
         this.clearCache(); // Clear cache after commit
       },
       { operation: 'commit' }
@@ -409,10 +412,10 @@ export class GitService {
       async () => {
         return withErrorHandling(
           async () => {
-            const status = await withTimeout(this.git.status(), GIT_TIMEOUT_MS);
+            const status = await withTimeout(this.git.status(), calculateGitTimeout({}));
             const branch = status.current;
 
-            await withTimeout(this.git.push('origin', branch), GIT_TIMEOUT_MS);
+            await withTimeout(this.git.push('origin', branch), calculateGitTimeout({}));
           },
           { operation: 'push' }
         );
