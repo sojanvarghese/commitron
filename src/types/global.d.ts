@@ -50,7 +50,6 @@ declare module 'simple-git' {
     diffSummary(args?: string[]): Promise<any>;
     add(files: string | string[]): Promise<void>;
     commit(message: string): Promise<any>;
-    push(remote?: string, branch?: string): Promise<any>;
     log(options?: { maxCount: number }): Promise<any>;
     getRemotes(verbose?: boolean): Promise<any[]>;
   }
