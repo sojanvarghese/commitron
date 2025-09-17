@@ -15,8 +15,6 @@ import { ErrorType } from './types/error-handler.js';
 import { withErrorHandling, SecureError } from './utils/error-handler.js';
 import { PerformanceMonitor, withPerformanceTracking } from './utils/performance.js';
 import { PERFORMANCE_FLAGS } from './constants/performance.js';
-import type * as InquirerType from 'inquirer';
-type Inquirer = typeof InquirerType;
 
 // Log startup time
 if (PERFORMANCE_FLAGS.ENABLE_PERFORMANCE_MONITORING) {
@@ -28,21 +26,21 @@ if (PERFORMANCE_FLAGS.ENABLE_PERFORMANCE_MONITORING) {
   });
 }
 
-let chalkCache: typeof import('chalk').default | null = null;
-let inquirerCache: Inquirer | null = null;
-let gradientStringCache: typeof import('gradient-string') | null = null;
+let chalkCache: any = null;
+let inquirerCache: any = null;
+let gradientStringCache: any = null;
 
-const loadChalk = async (): Promise<typeof import('chalk').default> => {
+const loadChalk = async (): Promise<any> => {
   chalkCache ??= (await import('chalk')).default;
   return chalkCache;
 };
 
-const loadInquirer = async (): Promise<typeof import('inquirer')> => {
+const loadInquirer = async (): Promise<any> => {
   inquirerCache ??= await import('inquirer');
   return inquirerCache;
 };
 
-const loadGradientString = async (): Promise<typeof import('gradient-string')> => {
+const loadGradientString = async (): Promise<any> => {
   gradientStringCache ??= await import('gradient-string');
   return gradientStringCache;
 };
@@ -77,7 +75,7 @@ program
   .command('commit')
   .alias('c')
   .description(
-    'Generate and create AI-powered commit messages using batch processing for optimal performance'
+    'Generate and create AI-powered commit messages'
   )
   .option(
     '-m, --message <message>',
@@ -112,7 +110,7 @@ program
             const result = CommitMessageSchema.safeParse(options.message);
             if (!result.success) {
               throw new SecureError(
-                `Invalid commit message: ${result.error.issues.map((e: any) => e.message).join(', ')}`,
+                `Invalid commit message: ${result.error.issues.map((e: { message: string }) => e.message).join(', ')}`,
                 ErrorType.VALIDATION_ERROR,
                 { operation: 'commit' },
                 true
@@ -122,7 +120,7 @@ program
           }
 
           // Import only when needed to avoid loading heavy dependencies
-          const operation = options.all ? 'commit-traditional' : 'commit-batch';
+          const operation = options.all ? 'commit-traditional' : 'commit-ai';
 
           await withPerformanceTracking(operation, async () => {
             const { CommitX } = await import('./core/commitx.js');
@@ -163,7 +161,7 @@ program
 program
   .command('diff')
   .alias('d')
-  .description('Show changes summary')
+  .description('Show unstaged changes summary')
   .action(async () => {
     return withErrorHandling(
       async (): Promise<void> => {
@@ -368,9 +366,9 @@ program
     const [chalk, { pastel }] = await Promise.all([loadChalk(), loadGradientString()]);
     console.log(pastel('📚 CommitX Usage Examples:\n'));
 
-    console.log(chalk.yellow('Basic usage (Individual commits):'));
-    console.log('  cx                             # Process files individually');
-    console.log('  cx commit --dry-run            # Preview individual commits');
+    console.log(chalk.yellow('Basic usage:'));
+    console.log('  cx                             # Process files with AI');
+    console.log('  cx commit --dry-run            # Preview commits');
     console.log('  cx commit                      # Direct CLI access');
     console.log('');
 
@@ -445,7 +443,7 @@ program.action(async (): Promise<void> => {
     // Import only when needed to avoid loading heavy dependencies
     const { CommitX } = await import('./core/commitx.js');
     const commitX = new CommitX();
-    await commitX.commit(); // Uses individual workflow by default
+    await commitX.commit(); // Uses AI processing by default
   } catch (error) {
     const chalk = await loadChalk();
     console.error(chalk.red(`Error: ${error}`));
@@ -487,7 +485,7 @@ if (PERFORMANCE_FLAGS.ENABLE_PERFORMANCE_MONITORING) {
 // Parse command line arguments
 if (process.argv.length === 2) {
   // No arguments provided, run default commit
-  void (async () => {
+  void (async (): Promise<void> => {
     try {
       // Import only when needed to avoid loading heavy dependencies
       await withPerformanceTracking('default-commit', async () => {
