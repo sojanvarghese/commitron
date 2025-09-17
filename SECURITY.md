@@ -55,10 +55,10 @@ CommitX implements comprehensive security measures to protect user data and prev
 
 ### Resource Limits & Timeouts
 
-- File size limits (10MB default)
-- Diff content size limits (50KB default)
-- API request size limits (100KB default)
-- Operation timeouts (30 seconds default)
+- File size limits (25MB default)
+- Diff content size limits (100KB default)
+- API request size limits (750KB default)
+- Dynamic operation timeouts (15-90 seconds based on file size and complexity)
 - Memory management for large files
 
 ### Error Handling
@@ -75,10 +75,10 @@ CommitX implements comprehensive security measures to protect user data and prev
 
 ```typescript
 const DEFAULT_LIMITS: ResourceLimits = {
-  maxFileSize: 10 * 1024 * 1024, // 10MB
-  maxDiffSize: 50000, // 50KB
-  maxApiRequestSize: 100000, // 100KB
-  timeoutMs: 30000, // 30 seconds
+  maxFileSize: 25 * 1024 * 1024, // 25MB
+  maxDiffSize: 100000, // 100KB
+  maxApiRequestSize: 750000, // 750KB
+  timeoutMs: 25000, // 25 seconds (base timeout, actual timeouts are calculated dynamically)
 };
 ```
 

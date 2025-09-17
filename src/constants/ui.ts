@@ -36,8 +36,7 @@ export const UI_CONSTANTS = {
   SPINNER_MESSAGES: {
     STAGING: 'Staging files...',
     COMMITTING: 'Creating commit...',
-    PUSHING: 'Pushing to remote...',
-    ANALYZING: 'Analyzing files for batch processing...',
+    ANALYZING: 'Analyzing files...',
     GENERATING_AI: 'Generating commit messages for',
     GENERATING_MESSAGE: 'Generating commit message...',
     ANALYZING_CHANGES: 'Analyzing changes...',

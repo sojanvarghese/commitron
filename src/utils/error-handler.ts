@@ -143,14 +143,7 @@ export class ErrorHandler {
       this.errorLog = this.errorLog.slice(-ERROR_LOG_LIMIT);
     }
 
-    if (process.env.NODE_ENV === 'development') {
-      console.error('Error logged:', {
-        type: error.type,
-        message: error.message,
-        context: error.context,
-        isRecoverable: error.isRecoverable,
-      });
-    }
+    // Development mode removed - error details logging disabled
   };
 
   private readonly displayError = (error: SecureError): void => {

@@ -31,7 +31,6 @@ export interface GitStatus {
 
 export interface CommitOptions {
   message?: string;
-  push?: boolean;
   dryRun?: boolean;
   interactive?: boolean;
   all?: boolean; // Stage all files and commit together (traditional workflow)

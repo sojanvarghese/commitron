@@ -1,3 +1,3 @@
-export const GIT_TIMEOUT_MS = 30000; // 30 seconds to handle pre-commit hooks
+// GIT_TIMEOUT_MS has been removed - use calculateGitTimeout() from utils/timeout.ts instead
 export const GIT_RETRY_ATTEMPTS = 3;
 export const GIT_RETRY_DELAY_MS = 500;

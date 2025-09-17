@@ -1,6 +1,9 @@
+#!/usr/bin/env node
+
+// Track startup performance from the very beginning
+const startupStart = performance.now();
+
 import { Command } from 'commander';
-import chalk from 'chalk';
-import inquirer from 'inquirer';
 import { readFileSync } from 'fs';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
@@ -10,7 +13,37 @@ import type { CommitConfig } from './types/common.js';
 import { CommitMessageSchema, CommitConfigSchema } from './schemas/validation.js';
 import { ErrorType } from './types/error-handler.js';
 import { withErrorHandling, SecureError } from './utils/error-handler.js';
-import { vice, pastel } from 'gradient-string';
+import { PerformanceMonitor, withPerformanceTracking } from './utils/performance.js';
+import { PERFORMANCE_FLAGS } from './constants/performance.js';
+
+// Log startup time
+if (PERFORMANCE_FLAGS.ENABLE_PERFORMANCE_MONITORING) {
+  process.nextTick(() => {
+    const startupTime = performance.now() - startupStart;
+    if (startupTime > 500) { // Only log if startup is slow
+      console.log(`🚀 Startup time: ${startupTime.toFixed(2)}ms`);
+    }
+  });
+}
+
+let chalkCache: any = null;
+let inquirerCache: any = null;
+let gradientStringCache: any = null;
+
+const loadChalk = async (): Promise<any> => {
+  chalkCache ??= (await import('chalk')).default;
+  return chalkCache;
+};
+
+const loadInquirer = async (): Promise<any> => {
+  inquirerCache ??= await import('inquirer');
+  return inquirerCache;
+};
+
+const loadGradientString = async (): Promise<any> => {
+  gradientStringCache ??= await import('gradient-string');
+  return gradientStringCache;
+};
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -19,7 +52,7 @@ const packageJson = JSON.parse(readFileSync(join(__dirname, '../package.json'), 
 const program = new Command();
 
 // Helper function to parse configuration values
-const parseConfigValue = (value: string): any => {
+const parseConfigValue = (value: string): string | number | boolean => {
   const lowerValue = value.toLowerCase();
 
   switch (lowerValue) {
@@ -34,7 +67,7 @@ const parseConfigValue = (value: string): any => {
 
 program
   .name('cx')
-  .description(vice('🚀 AI-powered Git commit assistant\n'))
+  .description('🚀 AI-powered Git commit assistant')
   .version(packageJson.version);
 
 // Main commit command
@@ -42,33 +75,42 @@ program
   .command('commit')
   .alias('c')
   .description(
-    'Generate and create AI-powered commit messages (processes files individually by default)'
+    'Generate and create AI-powered commit messages'
   )
   .option(
     '-m, --message <message>',
     'Use provided commit message instead of generating one (uses traditional workflow)'
   )
-  .option('-p, --push', 'Push changes after committing (disabled in individual mode)')
   .option('-d, --dry-run', 'Show what would be committed without actually committing')
   .option('-i, --interactive', 'Use interactive mode (for traditional workflow only)')
-  .option('--no-interactive', 'Use non-interactive mode (default for individual commits)')
   .option('--all', 'Stage all files and commit together (traditional workflow)')
   .action(
     async (options: {
       message?: string;
-      push?: boolean;
       dryRun?: boolean;
       interactive?: boolean;
       all?: boolean;
     }): Promise<void> => {
       return withErrorHandling(
         async (): Promise<void> => {
+          // Validate command combinations
+          if (options.interactive && !options.all) {
+            const chalk = await loadChalk();
+            console.error(chalk.red('❌ Error: --interactive option can only be used with --all flag'));
+            console.log(chalk.yellow('\n💡 Correct usage:'));
+            console.log(chalk.blue('  cx commit --all --interactive    # Interactive traditional workflow'));
+            console.log(chalk.blue('  cx commit --all                  # Non-interactive traditional workflow'));
+            console.log(chalk.blue('  cx commit                        # Batch processing (default)'));
+            console.log(chalk.blue('  cx commit --help                 # Show all options'));
+            process.exit(1);
+          }
+
           // Validate commit message if provided
           if (options.message) {
             const result = CommitMessageSchema.safeParse(options.message);
             if (!result.success) {
               throw new SecureError(
-                `Invalid commit message: ${result.error.issues.map((e: any) => e.message).join(', ')}`,
+                `Invalid commit message: ${result.error.issues.map((e: { message: string }) => e.message).join(', ')}`,
                 ErrorType.VALIDATION_ERROR,
                 { operation: 'commit' },
                 true
@@ -78,28 +120,19 @@ program
           }
 
           // Import only when needed to avoid loading heavy dependencies
-          const { CommitX } = await import('./core/commitx.js');
-          const commitX = new CommitX();
+          const operation = options.all ? 'commit-traditional' : 'commit-ai';
 
-          // Show warning if push is requested in individual mode
-          if (options.push && !options.message && !options.all) {
-            console.log(
-              chalk.yellow('⚠️  Push option is disabled when processing files individually.')
-            );
-            console.log(
-              chalk.gray(
-                '   Use --all flag to stage all files together, or push manually after committing.'
-              )
-            );
-            options.push = false;
-          }
+          await withPerformanceTracking(operation, async () => {
+            const { CommitX } = await import('./core/commitx.js');
+            const commitX = new CommitX();
 
-          await commitX.commit({
-            message: options.message,
-            push: options.push,
-            dryRun: options.dryRun,
-            interactive: options.interactive,
-            all: options.all,
+
+            await commitX.commit({
+              message: options.message,
+              dryRun: options.dryRun,
+              interactive: options.interactive,
+              all: options.all,
+            });
           });
         },
         { operation: 'commit' }
@@ -128,7 +161,7 @@ program
 program
   .command('diff')
   .alias('d')
-  .description('Show changes summary')
+  .description('Show unstaged changes summary')
   .action(async () => {
     return withErrorHandling(
       async (): Promise<void> => {
@@ -166,6 +199,7 @@ configCmd
         const parsedValue = parseConfigValue(value);
 
         await config.set(key as keyof CommitConfig, parsedValue);
+        const chalk = await loadChalk();
         console.log(chalk.green(`✅ Set ${key} = ${parsedValue}`));
       },
       { operation: 'configSet', key }
@@ -198,6 +232,7 @@ configCmd
         } else {
           const allConfig = config.getConfig();
           const apiKey = config.getApiKey();
+          const chalk = await loadChalk();
 
           console.log(chalk.blue('Current configuration:'));
           for (const [k, v] of Object.entries(allConfig)) {
@@ -220,6 +255,7 @@ configCmd
   .description('Reset configuration to defaults')
   .action(async () => {
     try {
+      const [inquirer, chalk] = await Promise.all([loadInquirer(), loadChalk()]);
       const { confirm } = await inquirer.prompt([
         {
           type: 'confirm',
@@ -237,6 +273,7 @@ configCmd
         console.log(chalk.yellow('Reset cancelled'));
       }
     } catch (error) {
+      const chalk = await loadChalk();
       console.error(chalk.red(`Error: ${error}`));
       process.exit(1);
     }
@@ -247,6 +284,7 @@ program
   .command('setup')
   .description('Interactive setup for first-time users')
   .action(async () => {
+    const [inquirer, chalk] = await Promise.all([loadInquirer(), loadChalk()]);
     console.log(chalk.blue('🚀 Welcome to CommitX Setup!\n'));
 
     try {
@@ -257,7 +295,7 @@ program
           type: 'input',
           name: 'apiKey',
           message: 'Enter your Gemini AI API key:',
-          validate: (input: string) => {
+          validate: (input: string): string | boolean => {
             if (!input.trim()) {
               return 'API key is required. Get one from https://makersuite.google.com/app/apikey';
             }
@@ -281,7 +319,8 @@ program
 program
   .command('privacy')
   .description('Show privacy settings and data handling information')
-  .action((): void => {
+  .action(async (): Promise<void> => {
+    const chalk = await loadChalk();
     console.log(chalk.blue('🔒 CommitX Privacy Information:\n'));
 
     console.log(chalk.yellow('Data Sent to AI:'));
@@ -323,18 +362,18 @@ program
 program
   .command('help-examples')
   .description('Show usage examples')
-  .action((): void => {
+  .action(async (): Promise<void> => {
+    const [chalk, { pastel }] = await Promise.all([loadChalk(), loadGradientString()]);
     console.log(pastel('📚 CommitX Usage Examples:\n'));
 
-    console.log(chalk.yellow('Basic usage (Individual commits):'));
-    console.log('  cx                             # Process files individually');
-    console.log('  cx commit --dry-run            # Preview individual commits');
+    console.log(chalk.yellow('Basic usage:'));
+    console.log('  cx                             # Process files with AI');
+    console.log('  cx commit --dry-run            # Preview commits');
     console.log('  cx commit                      # Direct CLI access');
     console.log('');
 
     console.log(chalk.yellow('Traditional workflow:'));
     console.log('  cx commit --all                # Stage all files and commit together');
-    console.log('  cx commit --all --push         # Stage all, commit, and push');
     console.log('  cx commit -m "fix: bug"        # Use custom message (traditional)');
     console.log('');
 
@@ -356,6 +395,7 @@ program
   .command('debug')
   .description('Debug Git repository detection and environment')
   .action(async (): Promise<void> => {
+    const chalk = await loadChalk();
     console.log(chalk.blue('\n🔍 CommitX Debug Information:\n'));
 
     console.log(chalk.gray('Environment:'));
@@ -403,30 +443,58 @@ program.action(async (): Promise<void> => {
     // Import only when needed to avoid loading heavy dependencies
     const { CommitX } = await import('./core/commitx.js');
     const commitX = new CommitX();
-    await commitX.commit(); // Uses individual workflow by default
+    await commitX.commit(); // Uses AI processing by default
   } catch (error) {
+    const chalk = await loadChalk();
     console.error(chalk.red(`Error: ${error}`));
     process.exit(1);
   }
 });
 
-// Error handling
-program.on('command:*', () => {
-  console.error(chalk.red(`Unknown command: ${program.args.join(' ')}`));
-  console.log(chalk.blue('Use "cx --help" for available commands'));
+// Error handling for unknown commands
+program.on('command:*', async (): Promise<void> => {
+  const chalk = await loadChalk();
+  console.error(chalk.red(`❌ Unknown command: ${program.args.join(' ')}`));
+  console.log(chalk.yellow('\n💡 Available commands:'));
+  console.log(chalk.blue('  cx --help              # Show all available commands'));
+  console.log(chalk.blue('  cx commit --help       # Show commit command options'));
+  console.log(chalk.blue('  cx help-examples       # Show usage examples'));
+  console.log(chalk.gray('\nFor more information, visit: https://github.com/sojanvarghese/commit-x'));
   process.exit(1);
 });
+
+// Error handling for invalid options
+program.on('option:*', async (): Promise<void> => {
+  const chalk = await loadChalk();
+  console.error(chalk.red(`❌ Unknown option: ${program.args.join(' ')}`));
+  console.log(chalk.yellow('\n💡 Available options:'));
+  console.log(chalk.blue('  cx --help              # Show all available commands'));
+  console.log(chalk.blue('  cx commit --help       # Show commit command options'));
+  console.log(chalk.gray('\nFor more information, visit: https://github.com/sojanvarghese/commit-x'));
+  process.exit(1);
+});
+
+// Performance monitoring exit handler
+if (PERFORMANCE_FLAGS.ENABLE_PERFORMANCE_MONITORING) {
+  process.on('exit', () => {
+    const monitor = PerformanceMonitor.getInstance();
+    monitor.logMetrics();
+  });
+}
 
 // Parse command line arguments
 if (process.argv.length === 2) {
   // No arguments provided, run default commit
-  void (async () => {
+  void (async (): Promise<void> => {
     try {
       // Import only when needed to avoid loading heavy dependencies
-      const { CommitX } = await import('./core/commitx.js');
-      const commitX = new CommitX();
-      await commitX.commit();
+      await withPerformanceTracking('default-commit', async () => {
+        const { CommitX } = await import('./core/commitx.js');
+        const commitX = new CommitX();
+        await commitX.commit();
+      });
     } catch (error) {
+      const chalk = await loadChalk();
       console.error(chalk.red(`Error: ${error}`));
       process.exit(1);
     }

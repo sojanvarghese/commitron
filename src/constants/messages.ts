@@ -26,7 +26,6 @@ export const SUCCESS_MESSAGES = {
   CONFIGURATION_RESET: 'Configuration reset to defaults',
   FILES_STAGED: 'Files staged successfully',
   COMMIT_CREATED: 'Creating commit...',
-  CHANGES_PUSHED: 'Changes pushed successfully',
   FILES_COMMITTED: 'Committed files successfully',
   AI_MESSAGES_GENERATED: 'Generated AI commit messages',
   COMMIT_MESSAGES_GENERATED: 'Generated commit message suggestions',
@@ -48,16 +47,12 @@ export const INFO_MESSAGES = {
   WOULD_STAGE_COMMIT: 'Would stage and commit:',
   GENERATING_MESSAGE: 'Generating commit message...',
   ANALYZING_CHANGES: 'Analyzing changes...',
-  ANALYZING_FILES: 'Analyzing files for batch processing...',
+  ANALYZING_FILES: 'Analyzing files...',
   STAGING_FILES: 'Staging files...',
-  PUSHING_CHANGES: 'Pushing to remote...',
   COMMITTING_FILES: 'Committing files...',
 } as const;
 
 export const WARNING_MESSAGES = {
-  PUSH_DISABLED_INDIVIDUAL: '⚠️  Push option is disabled when processing files individually.',
-  PUSH_DISABLED_INFO:
-    '   Use --all flag to stage all files together, or push manually after committing.',
   NO_FILES_STAGED: 'No files staged. Aborting commit.',
   NO_CHANGES_DETECTED: 'No changes detected. Working directory is clean.',
   NO_COMMIT_MESSAGE: 'No commit message provided. Aborting commit.',
@@ -70,7 +65,6 @@ export const WARNING_MESSAGES = {
   USING_FALLBACK_MESSAGES: 'Using fallback messages due to AI error:',
   FAILED_TO_ANALYZE: 'Failed to analyze',
   FAILED_TO_COMMIT: 'Failed to commit',
-  FAILED_TO_PUSH: 'Failed to push:',
   FAILED_TO_GET_DIFF: 'Failed to get diff for',
   SKIPPING_INVALID_SUGGESTION: 'Skipping invalid suggestion:',
   RESET_CANCELLED: 'Reset cancelled',

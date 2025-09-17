@@ -1,4 +1,4 @@
-import { GoogleGenerativeAI } from '@google/generative-ai';
+import { GoogleGenerativeAI, type GenerativeModel } from '@google/generative-ai';
 import type { CommitSuggestion, GitDiff } from '../types/common.js';
 import { ConfigManager } from '../config.js';
 import { GitDiffSchema, CommitSuggestionSchema, DiffContentSchema } from '../schemas/validation.js';
@@ -6,6 +6,7 @@ import { withTimeout } from '../utils/security.js';
 import { ErrorType } from '../types/error-handler.js';
 import { ErrorHandler, withErrorHandling, withRetry, SecureError } from '../utils/error-handler.js';
 import { DEFAULT_LIMITS } from '../constants/security.js';
+import { calculateAITimeout } from '../utils/timeout.js';
 import {
   AI_RETRY_ATTEMPTS,
   AI_RETRY_DELAY_MS,
@@ -21,10 +22,52 @@ import {
   type SanitizedDiff,
 } from '../utils/data-sanitization.js';
 
+// Simple LRU cache for AI responses
+class LRUCache<K, V> {
+  private readonly cache = new Map<K, V>();
+  private readonly maxSize: number;
+
+  constructor(maxSize: number = 50) {
+    this.maxSize = maxSize;
+  }
+
+  get(key: K): V | undefined {
+    const value = this.cache.get(key);
+    if (value !== undefined) {
+      // Move to end (most recently used)
+      this.cache.delete(key);
+      this.cache.set(key, value);
+    }
+    return value;
+  }
+
+  set(key: K, value: V): void {
+    if (this.cache.has(key)) {
+      this.cache.delete(key);
+    } else if (this.cache.size >= this.maxSize) {
+      // Remove least recently used
+      const firstKey = this.cache.keys().next().value as K;
+      this.cache.delete(firstKey);
+    }
+    this.cache.set(key, value);
+  }
+
+  clear(): void {
+    this.cache.clear();
+  }
+
+  size(): number {
+    return this.cache.size;
+  }
+}
+
 export class AIService {
   private readonly genAI: GoogleGenerativeAI;
   private readonly config: ConfigManager;
   private readonly errorHandler: ErrorHandler;
+  private readonly responseCache = new LRUCache<string, CommitSuggestion[]>(100);
+  private readonly batchCache = new LRUCache<string, { [filename: string]: CommitSuggestion[] }>(50);
+  private model: GenerativeModel | null = null; // Cache the model instance
 
   constructor() {
     this.config = ConfigManager.getInstance();
@@ -45,6 +88,23 @@ export class AIService {
     this.genAI = new GoogleGenerativeAI(apiKey);
   }
 
+  private getModel(): GenerativeModel {
+    if (!this.model) {
+      const config = this.config.getConfig();
+      this.model = this.genAI.getGenerativeModel({
+        model: config.model ?? AI_DEFAULT_MODEL,
+      });
+    }
+    return this.model;
+  }
+
+  // Generate cache key from diffs for deduplication
+  private generateCacheKey(diffs: GitDiff[]): string {
+    return diffs
+      .map((diff) => `${diff.file}:${diff.additions}:${diff.deletions}:${diff.changes?.substring(0, 100)}`)
+      .join('|');
+  }
+
   generateCommitMessage = async (diffs: GitDiff[]): Promise<CommitSuggestion[]> => {
     return withRetry(
       async () => {
@@ -57,6 +117,13 @@ export class AIService {
                 { operation: 'generateCommitMessage' },
                 true
               );
+            }
+
+            // Check cache first
+            const cacheKey = this.generateCacheKey(diffs);
+            const cached = this.responseCache.get(cacheKey);
+            if (cached) {
+              return cached;
             }
 
             // Filter out sensitive files and validate diffs
@@ -102,10 +169,7 @@ export class AIService {
               );
             }
 
-            const config = this.config.getConfig();
-            const model = this.genAI.getGenerativeModel({
-              model: config.model ?? AI_DEFAULT_MODEL,
-            });
+            const model = this.getModel();
 
             const { prompt, sanitizedDiffs } = this.buildJsonPrompt(validatedDiffs);
 
@@ -118,18 +182,29 @@ export class AIService {
               );
             }
 
-            const { response } = await withTimeout(
+            const totalChanges = validatedDiffs.reduce((sum, diff) => sum + diff.additions + diff.deletions, 0);
+            const aiTimeout = calculateAITimeout({
+              diffSize: prompt.length,
+              fileCount: validatedDiffs.length,
+              totalChanges
+            });
+            const result = await withTimeout(
               model.generateContent(prompt),
-              DEFAULT_LIMITS.timeoutMs
+              aiTimeout
             );
-            const text = response.text();
+            const text = result.response.text();
 
             // Use parseBatchResponse for consistency
             const batchResults = this.parseBatchResponse(text, validatedDiffs, sanitizedDiffs);
             const suggestions = batchResults[validatedDiffs[0]?.file] ?? [];
 
             // Validate suggestions using Zod
-            return this.validateAndImprove(suggestions);
+            const validatedSuggestions = this.validateAndImprove(suggestions);
+
+            // Cache the result
+            this.responseCache.set(cacheKey, validatedSuggestions);
+
+            return validatedSuggestions;
           },
           { operation: 'generateCommitMessage' }
         );
@@ -154,6 +229,13 @@ export class AIService {
                 { operation: 'generateBatchCommitMessages' },
                 true
               );
+            }
+
+            // Check batch cache first
+            const cacheKey = this.generateCacheKey(diffs);
+            const cached = this.batchCache.get(cacheKey);
+            if (cached) {
+              return cached;
             }
 
             // Filter out sensitive files and validate diffs
@@ -199,10 +281,7 @@ export class AIService {
               );
             }
 
-            const config = this.config.getConfig();
-            const model = this.genAI.getGenerativeModel({
-              model: config.model ?? AI_DEFAULT_MODEL,
-            });
+            const model = this.getModel();
 
             const { prompt, sanitizedDiffs } = this.buildJsonPrompt(validatedDiffs);
 
@@ -215,12 +294,21 @@ export class AIService {
               );
             }
 
-            const { response } = await withTimeout(
+            const totalChanges = validatedDiffs.reduce((sum, diff) => sum + diff.additions + diff.deletions, 0);
+            const aiTimeout = calculateAITimeout({
+              diffSize: prompt.length,
+              fileCount: validatedDiffs.length,
+              totalChanges
+            });
+            const result = await withTimeout(
               model.generateContent(prompt),
-              DEFAULT_LIMITS.timeoutMs
+              aiTimeout
             );
-            const text = response.text();
+            const text = result.response.text();
             const batchResults = this.parseBatchResponse(text, validatedDiffs, sanitizedDiffs);
+
+            // Cache the batch result
+            this.batchCache.set(cacheKey, batchResults);
 
             return batchResults;
           },
@@ -262,7 +350,7 @@ export class AIService {
 
     const promptData = {
       role: 'Expert Git Commit Message Generator',
-      task: "Generate individual, concise Git commit messages (3-20 words each) for each file's specific changes. Each message must accurately describe WHAT WAS CHANGED in that specific file.",
+      task: "Generate concise Git commit messages (3-20 words each) for each file's specific changes. Each message must accurately describe WHAT WAS CHANGED in that specific file.",
       instructions: [
         '**Focus:** Describe new functionality, features, or significant changes introduced.',
         "**Tense:** Use strong past tense action verbs (e.g., 'Implemented', 'Added', 'Created', 'Refactored', 'Fixed', 'Optimized') at the start of the message.",
@@ -448,7 +536,7 @@ export class AIService {
       } else if (parsed.suggestions && Array.isArray(parsed.suggestions)) {
         // Single file format: { suggestions: [{ message, description, confidence }] }
         // Apply the same suggestion to all files
-        const suggestions = parsed.suggestions.map((suggestion: any) => ({
+        const suggestions = parsed.suggestions.map((suggestion: { message?: string; description?: string; type?: string; scope?: string; confidence?: number | string }) => ({
           message: suggestion.message ?? '',
           description: suggestion.description ?? '',
           type: suggestion.type ?? '',
@@ -456,7 +544,7 @@ export class AIService {
           confidence:
             typeof suggestion.confidence === 'number'
               ? suggestion.confidence
-              : (parseFloat(suggestion.confidence) ?? UI_CONSTANTS.CONFIDENCE_DEFAULT),
+              : (parseFloat(suggestion.confidence?.toString() ?? '0') ?? UI_CONSTANTS.CONFIDENCE_DEFAULT),
         }));
 
         for (const diff of diffs) {
@@ -560,7 +648,7 @@ export class AIService {
     for (const line of lines) {
       if (
         line.match(COMMIT_MESSAGE_PATTERNS.NUMBERED_PATTERN) ||
-        COMMIT_MESSAGE_PATTERNS.AVOID_PREFIXES.some((prefix: string) => line.includes(prefix))
+        COMMIT_MESSAGE_PATTERNS.AVOID_PREFIXES.some((prefix) => line.includes(prefix))
       ) {
         const message = line.replace(COMMIT_MESSAGE_PATTERNS.NUMBERED_PATTERN, '').trim();
         if (message && message.length > 5) {
