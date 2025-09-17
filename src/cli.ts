@@ -77,27 +77,36 @@ program
   .command('commit')
   .alias('c')
   .description(
-    'Generate and create AI-powered commit messages (processes files individually by default)'
+    'Generate and create AI-powered commit messages using batch processing for optimal performance'
   )
   .option(
     '-m, --message <message>',
     'Use provided commit message instead of generating one (uses traditional workflow)'
   )
-  .option('-p, --push', 'Push changes after committing (disabled in individual mode)')
   .option('-d, --dry-run', 'Show what would be committed without actually committing')
   .option('-i, --interactive', 'Use interactive mode (for traditional workflow only)')
-  .option('--no-interactive', 'Use non-interactive mode (default for individual commits)')
   .option('--all', 'Stage all files and commit together (traditional workflow)')
   .action(
     async (options: {
       message?: string;
-      push?: boolean;
       dryRun?: boolean;
       interactive?: boolean;
       all?: boolean;
     }): Promise<void> => {
       return withErrorHandling(
         async (): Promise<void> => {
+          // Validate command combinations
+          if (options.interactive && !options.all) {
+            const chalk = await loadChalk();
+            console.error(chalk.red('❌ Error: --interactive option can only be used with --all flag'));
+            console.log(chalk.yellow('\n💡 Correct usage:'));
+            console.log(chalk.blue('  cx commit --all --interactive    # Interactive traditional workflow'));
+            console.log(chalk.blue('  cx commit --all                  # Non-interactive traditional workflow'));
+            console.log(chalk.blue('  cx commit                        # Batch processing (default)'));
+            console.log(chalk.blue('  cx commit --help                 # Show all options'));
+            process.exit(1);
+          }
+
           // Validate commit message if provided
           if (options.message) {
             const result = CommitMessageSchema.safeParse(options.message);
@@ -113,29 +122,15 @@ program
           }
 
           // Import only when needed to avoid loading heavy dependencies
-          const operation = options.all ? 'commit-traditional' : 'commit-individual';
+          const operation = options.all ? 'commit-traditional' : 'commit-batch';
 
           await withPerformanceTracking(operation, async () => {
             const { CommitX } = await import('./core/commitx.js');
             const commitX = new CommitX();
 
-            // Show warning if push is requested in individual mode
-            if (options.push && !options.message && !options.all) {
-              const chalk = await loadChalk();
-              console.log(
-                chalk.yellow('⚠️  Push option is disabled when processing files individually.')
-              );
-              console.log(
-                chalk.gray(
-                  '   Use --all flag to stage all files together, or push manually after committing.'
-                )
-              );
-              options.push = false;
-            }
 
             await commitX.commit({
               message: options.message,
-              push: options.push,
               dryRun: options.dryRun,
               interactive: options.interactive,
               all: options.all,
@@ -381,7 +376,6 @@ program
 
     console.log(chalk.yellow('Traditional workflow:'));
     console.log('  cx commit --all                # Stage all files and commit together');
-    console.log('  cx commit --all --push         # Stage all, commit, and push');
     console.log('  cx commit -m "fix: bug"        # Use custom message (traditional)');
     console.log('');
 
@@ -459,11 +453,26 @@ program.action(async (): Promise<void> => {
   }
 });
 
-// Error handling
+// Error handling for unknown commands
 program.on('command:*', async (): Promise<void> => {
   const chalk = await loadChalk();
-  console.error(chalk.red(`Unknown command: ${program.args.join(' ')}`));
-  console.log(chalk.blue('Use "cx --help" for available commands'));
+  console.error(chalk.red(`❌ Unknown command: ${program.args.join(' ')}`));
+  console.log(chalk.yellow('\n💡 Available commands:'));
+  console.log(chalk.blue('  cx --help              # Show all available commands'));
+  console.log(chalk.blue('  cx commit --help       # Show commit command options'));
+  console.log(chalk.blue('  cx help-examples       # Show usage examples'));
+  console.log(chalk.gray('\nFor more information, visit: https://github.com/sojanvarghese/commit-x'));
+  process.exit(1);
+});
+
+// Error handling for invalid options
+program.on('option:*', async (): Promise<void> => {
+  const chalk = await loadChalk();
+  console.error(chalk.red(`❌ Unknown option: ${program.args.join(' ')}`));
+  console.log(chalk.yellow('\n💡 Available options:'));
+  console.log(chalk.blue('  cx --help              # Show all available commands'));
+  console.log(chalk.blue('  cx commit --help       # Show commit command options'));
+  console.log(chalk.gray('\nFor more information, visit: https://github.com/sojanvarghese/commit-x'));
   process.exit(1);
 });
 
