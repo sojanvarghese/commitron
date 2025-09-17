@@ -59,7 +59,6 @@ export const CommitSuggestionSchema = z.object({
 // Commit options schema
 export const CommitOptionsSchema = z.object({
   message: z.string().optional(),
-  push: z.boolean().optional(),
   dryRun: z.boolean().optional(),
   interactive: z.boolean().optional(),
   all: z.boolean().optional(),
