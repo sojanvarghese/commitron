@@ -496,14 +496,13 @@ export class CommitX {
       return true;
     }
 
-    // Check for certain file types with many changes
-    if (totalChanges > 50 && ['json', 'xml', 'css', 'scss', 'less'].includes(fileType)) {
+    // Check for certain file types - always use summary for these
+    if (['json', 'xml', 'css', 'scss', 'less'].includes(fileType)) {
       return true;
     }
 
-    // Check for documentation files - use summary for all markdown files with > 10 changes
+    // Check for documentation files - always use summary for these
     if (
-      totalChanges > 10 &&
       ['markdown', 'unknown'].includes(fileType) &&
       (fileName.endsWith('.md') || fileName.endsWith('.txt') || fileName.endsWith('.rst'))
     ) {
@@ -600,22 +599,20 @@ export class CommitX {
     }
 
     // Check for configuration files
-    if (baseName.endsWith('.json') && totalChanges > 50) {
+    if (baseName.endsWith('.json')) {
       return `Updated ${fileName} configuration`;
     }
 
     // Check for style files
     if (
-      (baseName.endsWith('.css') || baseName.endsWith('.scss') || baseName.endsWith('.less')) &&
-      totalChanges > 50
+      (baseName.endsWith('.css') || baseName.endsWith('.scss') || baseName.endsWith('.less'))
     ) {
       return `Updated ${fileName} styles`;
     }
 
     // Check for documentation files
     if (
-      (baseName.endsWith('.md') || baseName.endsWith('.txt') || baseName.endsWith('.rst')) &&
-      totalChanges > 30
+      (baseName.endsWith('.md') || baseName.endsWith('.txt') || baseName.endsWith('.rst'))
     ) {
       return `Updated ${fileName} documentation`;
     }
