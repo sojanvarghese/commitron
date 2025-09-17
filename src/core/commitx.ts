@@ -52,23 +52,8 @@ export class CommitX {
 
       let processedCount = 0;
 
-      // Optimize for multiple files: use batch processing when beneficial
-      if (unstagedFiles.length > 1) {
-        processedCount = await this.commitFilesBatch(unstagedFiles, options);
-      } else {
-        // Fall back to individual processing for single files
-        for (const file of unstagedFiles) {
-          try {
-            const success = await this.commitIndividualFile(file, options);
-            if (success) {
-              processedCount++;
-            }
-          } catch (error) {
-            const fileName = file.split('/').pop() ?? file;
-            console.error(chalk.red(`Failed to process ${fileName}: ${error}`));
-          }
-        }
-      }
+      // Always use batch processing for better performance and consistency
+      processedCount = await this.commitFilesBatch(unstagedFiles, options);
 
       if (processedCount > 0) {
         console.log(
