@@ -7,7 +7,7 @@
 ## ✨ Features
 
 - 🤖 **Smart Analysis** - Automatically understands code changes and generates contextual commit messages
-- 📝 **Multiple Workflows** - Individual file processing or traditional batch commits
+- 📝 **Multiple Workflows** - Batch processing for optimal performance or traditional commits
 - 🎯 **Intelligent Fallbacks** - Summary messages for large files, lock files, and build artifacts
 - 🔧 **Interactive Mode** - Choose from AI-generated suggestions or write custom messages
 - 🔒 **Security-First** - Path validation, input sanitization, and secure API key handling
@@ -47,7 +47,7 @@ export GEMINI_API_KEY="your_api_key_here"
 ### Usage
 
 ```bash
-# Process files individually (recommended)
+# Process files with AI (recommended)
 cx
 
 # Traditional workflow
@@ -61,13 +61,12 @@ cx commit --dry-run
 
 | Command | Description |
 |---------|-------------|
-| `cx` | Process files individually with AI |
+| `cx` | Process files with AI |
 | `cx commit --all` | Stage all files and commit together |
 | `cx commit --dry-run` | Preview commits without executing |
-| `cx commit --push` | Commit and push changes |
 | `cx commit -m "message"` | Use custom commit message |
 | `cx status` | Show repository status |
-| `cx diff` | Show changes summary (staged changes only) |
+| `cx diff` | Show unstaged changes summary |
 | `cx config` | View configuration |
 | `cx config set <key> <value>` | Set configuration value |
 | `cx config reset` | Reset configuration to defaults |
@@ -81,9 +80,7 @@ cx commit --dry-run
 #### Commit Command Options
 - `--all` - Stage all files and commit together (traditional workflow)
 - `--dry-run` - Show what would be committed without actually committing
-- `--push` - Push changes after committing (disabled in individual mode)
 - `--interactive` - Use interactive mode (for traditional workflow only)
-- `--no-interactive` - Use non-interactive mode (default for individual commits)
 - `-m, --message <message>` - Use provided commit message instead of generating one
 
 ## ⚙️ Configuration
