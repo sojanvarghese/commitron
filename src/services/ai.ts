@@ -350,7 +350,7 @@ export class AIService {
 
     const promptData = {
       role: 'Expert Git Commit Message Generator',
-      task: "Generate individual, concise Git commit messages (3-20 words each) for each file's specific changes. Each message must accurately describe WHAT WAS CHANGED in that specific file.",
+      task: "Generate concise Git commit messages (3-20 words each) for each file's specific changes. Each message must accurately describe WHAT WAS CHANGED in that specific file.",
       instructions: [
         '**Focus:** Describe new functionality, features, or significant changes introduced.',
         "**Tense:** Use strong past tense action verbs (e.g., 'Implemented', 'Added', 'Created', 'Refactored', 'Fixed', 'Optimized') at the start of the message.",
@@ -536,7 +536,7 @@ export class AIService {
       } else if (parsed.suggestions && Array.isArray(parsed.suggestions)) {
         // Single file format: { suggestions: [{ message, description, confidence }] }
         // Apply the same suggestion to all files
-        const suggestions = parsed.suggestions.map((suggestion: any) => ({
+        const suggestions = parsed.suggestions.map((suggestion: { message?: string; description?: string; type?: string; scope?: string; confidence?: number | string }) => ({
           message: suggestion.message ?? '',
           description: suggestion.description ?? '',
           type: suggestion.type ?? '',
@@ -544,7 +544,7 @@ export class AIService {
           confidence:
             typeof suggestion.confidence === 'number'
               ? suggestion.confidence
-              : (parseFloat(suggestion.confidence) ?? UI_CONSTANTS.CONFIDENCE_DEFAULT),
+              : (parseFloat(suggestion.confidence?.toString() ?? '0') ?? UI_CONSTANTS.CONFIDENCE_DEFAULT),
         }));
 
         for (const diff of diffs) {
