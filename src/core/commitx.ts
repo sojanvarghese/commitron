@@ -50,18 +50,15 @@ export class CommitX {
         return;
       }
 
-      let processedCount = 0;
+      // Process files with AI for optimal performance
+      const processedCount = await this.commitFilesBatch(unstagedFiles, options);
 
-      // Always use batch processing for better performance and consistency
-      processedCount = await this.commitFilesBatch(unstagedFiles, options);
-
-      if (processedCount > 0) {
-        console.log(
-          chalk.green(
-            `\n✅ Successfully processed ${processedCount} of ${unstagedFiles.length} files`
+      console.log(
+        chalk.green( processedCount > 1 ?
+          `\n✅ Successfully processed ${processedCount} of ${unstagedFiles.length} files.` :
+          `\n✅ Successfully processed the file.`
           )
-        );
-      }
+      );
 
       // Force exit to prevent delay from lingering HTTP connections
       if (options.dryRun || processedCount > 0) {
@@ -111,15 +108,6 @@ export class CommitX {
     await this.gitService.commit(commitMessage);
     commitSpinner.succeed(`Committed: ${chalk.green(commitMessage)}`);
 
-    if (options.push === true) {
-      const pushSpinner = ora(UI_CONSTANTS.SPINNER_MESSAGES.PUSHING).start();
-      try {
-        await this.gitService.push();
-        pushSpinner.succeed(SUCCESS_MESSAGES.CHANGES_PUSHED);
-      } catch (error) {
-        pushSpinner.fail(`${WARNING_MESSAGES.FAILED_TO_PUSH} ${error}`);
-      }
-    }
 
     // Force exit to prevent delay from lingering HTTP connections
     setTimeout(() => process.exit(0), UI_CONSTANTS.EXIT_DELAY_MS);
@@ -163,7 +151,11 @@ export class CommitX {
     }
   };
 
-  private readonly analyzeFilesForBatch = async (files: string[]) => {
+  private readonly analyzeFilesForBatch = async (files: string[]): Promise<{
+    aiEligibleFiles: { file: string; diff: GitDiff }[];
+    summaryFiles: { file: string; diff: GitDiff }[];
+    skippedFiles: string[];
+  }> => {
     const aiEligibleFiles: { file: string; diff: GitDiff }[] = [];
     const summaryFiles: { file: string; diff: GitDiff }[] = [];
     const skippedFiles: string[] = [];
@@ -233,7 +225,7 @@ export class CommitX {
 
   private readonly generateBatchCommitMessages = async (
     aiEligibleFiles: { file: string; diff: GitDiff }[]
-  ) => {
+  ): Promise<{ [filename: string]: string }> => {
     const aiCommitMessages: { [filename: string]: string } = {};
 
     if (aiEligibleFiles.length === 0) {
@@ -255,7 +247,7 @@ export class CommitX {
           suggestions?.[0]?.message ??
           this.generateFallbackCommitMessage(
             file,
-            aiEligibleFiles.find((item) => item.file === file)!.diff
+            aiEligibleFiles.find((item) => item.file === file)?.diff ?? { file, additions: 0, deletions: 0, changes: '', isNew: false, isDeleted: false, isRenamed: false }
           );
       }
       aiSpinner.succeed(`Generated ${Object.keys(aiCommitMessages).length} AI commit messages`);
@@ -527,7 +519,7 @@ export class CommitX {
     const totalChanges = fileDiff.additions + fileDiff.deletions;
 
     // Helper function to generate dependency change message
-    const getDependencyChangeMessage = (config: { name: string; type: string }) => {
+    const getDependencyChangeMessage = (config: { name: string; type: string }): string => {
       const isAdding = fileDiff.additions > fileDiff.deletions * 2;
       const isRemoving = fileDiff.deletions > fileDiff.additions * 2;
 
@@ -729,7 +721,7 @@ export class CommitX {
             type: 'input',
             name: 'customMessage',
             message: `Enter commit message${file ? ` for ${chalk.cyan(file)}` : ''}:`,
-            validate: (input: string) => {
+            validate: (input: string): string | boolean => {
               if (!input.trim()) {
                 return 'Commit message cannot be empty';
               }
