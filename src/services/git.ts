@@ -8,8 +8,7 @@ import {
   validateCommitMessage,
 } from '../utils/security.js';
 import { ErrorType } from '../types/error-handler.js';
-import { ErrorHandler, withErrorHandling, withRetry, SecureError } from '../utils/error-handler.js';
-import { GIT_RETRY_ATTEMPTS, GIT_RETRY_DELAY_MS } from '../constants/git.js';
+import { ErrorHandler, withErrorHandling, SecureError } from '../utils/error-handler.js';
 import { calculateGitTimeout } from '../utils/timeout.js';
 import { ERROR_MESSAGES } from '../constants/messages.js';
 import { UI_CONSTANTS } from '../constants/ui.js';
@@ -310,10 +309,28 @@ export class GitService {
   };
 
   getChangesSummary = async (): Promise<string> => {
-    const diffs = await this.getStagedDiff();
+    const status = await withTimeout(this.git.status(), calculateGitTimeout({}));
+    const unstagedFiles = [...status.modified, ...status.not_added, ...status.deleted];
+
+    if (unstagedFiles.length === 0) {
+      return 'No unstaged changes found.';
+    }
+
+    const diffs: GitDiff[] = [];
+    const validatedFiles = this.validateFilePaths(unstagedFiles);
+
+    for (const file of validatedFiles) {
+      try {
+        const diff = await this.getFileDiff(file, false);
+        diffs.push(diff);
+      } catch (error) {
+        console.warn(`Failed to get diff: ${error}`);
+        continue;
+      }
+    }
 
     if (diffs.length === 0) {
-      return ERROR_MESSAGES.NO_STAGED_CHANGES_DIFF;
+      return 'No valid changes found.';
     }
 
     let summary = `Changes summary:\n`;
@@ -328,7 +345,6 @@ export class GitService {
     summary += `Files:\n`;
     diffs.forEach((diff) => {
       const status = this.getFileStatus(diff);
-
       summary += `- ${status} ${diff.file} (+${diff.additions}/-${diff.deletions})\n`;
     });
 
@@ -407,24 +423,6 @@ export class GitService {
     );
   };
 
-  push = async (): Promise<void> => {
-    return withRetry(
-      async () => {
-        return withErrorHandling(
-          async () => {
-            const status = await withTimeout(this.git.status(), calculateGitTimeout({}));
-            const branch = status.current;
-
-            await withTimeout(this.git.push('origin', branch), calculateGitTimeout({}));
-          },
-          { operation: 'push' }
-        );
-      },
-      GIT_RETRY_ATTEMPTS,
-      GIT_RETRY_DELAY_MS,
-      { operation: 'push' }
-    );
-  };
 
   getLastCommitMessage = async (): Promise<string | null> => {
     try {
