@@ -1,7 +1,7 @@
 // Error messages and user-facing text constants
 export const ERROR_MESSAGES = {
   API_KEY_NOT_FOUND:
-    'Gemini API key not found. Please set GEMINI_API_KEY environment variable or configure it with "commit-x config set apiKey YOUR_API_KEY"',
+    'Gemini API key not found. Please set GEMINI_API_KEY environment variable or configure it with "commitx config set apiKey YOUR_API_KEY"',
   NO_STAGED_CHANGES: 'No staged changes found. Please stage your changes with "git add" first.',
   NO_DIFFS_PROVIDED: 'No diffs provided for commit message generation',
   NO_VALID_DIFFS: 'No valid diffs found for commit message generation',
@@ -73,9 +73,9 @@ export const WARNING_MESSAGES = {
 } as const;
 
 export const HELP_MESSAGES = {
-  USAGE_COMMANDS: 'Use "commit-x --help" for available commands',
-  CONFIG_MODIFY: 'Use "commit-x config" to modify settings later.',
-  COMMIT_X_USAGE: 'You can now use "commit-x" or "cx" to start making AI-powered commits.',
+  USAGE_COMMANDS: 'Use "commitx --help" for available commands',
+  CONFIG_MODIFY: 'Use "commitx config" to modify settings later.',
+  COMMIT_X_USAGE: 'You can now use "commitx" or "cx" to start making AI-powered commits.',
 } as const;
 
 export const COMMIT_MESSAGES = {
