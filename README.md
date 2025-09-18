@@ -25,8 +25,8 @@
 
 ```bash
 # Clone and install locally
-git clone https://github.com/sojanvarghese/commit-x.git
-cd commit-x
+git clone https://github.com/sojanvarghese/commitx.git
+cd commitx
 yarn install
 yarn build
 
