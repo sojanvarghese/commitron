@@ -354,7 +354,7 @@ program
     console.log('  • Located in sensitive directory\n');
 
     console.log(
-      chalk.gray('For more information, visit: https://github.com/sojanvarghese/commit-x#privacy')
+      chalk.gray('For more information, visit: https://github.com/sojanvarghese/commitx#privacy')
     );
   });
 
@@ -459,7 +459,7 @@ program.on('command:*', async (): Promise<void> => {
   console.log(chalk.blue('  cx --help              # Show all available commands'));
   console.log(chalk.blue('  cx commit --help       # Show commit command options'));
   console.log(chalk.blue('  cx help-examples       # Show usage examples'));
-  console.log(chalk.gray('\nFor more information, visit: https://github.com/sojanvarghese/commit-x'));
+  console.log(chalk.gray('\nFor more information, visit: https://github.com/sojanvarghese/commitx'));
   process.exit(1);
 });
 
@@ -470,7 +470,7 @@ program.on('option:*', async (): Promise<void> => {
   console.log(chalk.yellow('\n💡 Available options:'));
   console.log(chalk.blue('  cx --help              # Show all available commands'));
   console.log(chalk.blue('  cx commit --help       # Show commit command options'));
-  console.log(chalk.gray('\nFor more information, visit: https://github.com/sojanvarghese/commit-x'));
+  console.log(chalk.gray('\nFor more information, visit: https://github.com/sojanvarghese/commitx'));
   process.exit(1);
 });
 
