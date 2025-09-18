@@ -53,7 +53,13 @@
     "config:reset": "yarn cx config reset",
     "setup": "yarn cx setup",
     "help": "yarn cx help-examples",
-    "uninstall": "npm uninstall -g commitron"
+    "uninstall": "npm uninstall -g commitron",
+    "version:patch": "yarn version patch --no-git-tag-version",
+    "version:minor": "yarn version minor --no-git-tag-version",
+    "version:major": "yarn version major --no-git-tag-version",
+    "release:patch": "yarn build && yarn version:patch && npm publish",
+    "release:minor": "yarn build && yarn version:minor && npm publish",
+    "release:major": "yarn build && yarn version:major && npm publish"
   },
   "dependencies": {
     "@google/generative-ai": "^0.24.1",
