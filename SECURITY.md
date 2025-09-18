@@ -2,7 +2,7 @@
 
 ## Overview
 
-CommitX implements comprehensive security measures to protect user data and prevent common security vulnerabilities. This document outlines the security features, data handling practices, and privacy protections implemented in the application.
+Commitron implements comprehensive security measures to protect user data and prevent common security vulnerabilities. This document outlines the security features, data handling practices, and privacy protections implemented in the application.
 
 ## Data Privacy & Protection
 
