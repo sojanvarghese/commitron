@@ -1,6 +1,11 @@
 # Commitron
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![version](https://img.shields.io/npm/v/commitron.svg)](https://www.npmjs.com/package/commitron)
+[![downloads](https://img.shields.io/npm/dm/commitron.svg)](https://www.npmjs.com/package/commitron)
+[![Node.js](https://img.shields.io/node/v/commitron.svg)](https://nodejs.org/)
+[![TypeScript](https://img.shields.io/badge/TypeScript-007ACC?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
+
 
 > AI-powered Git commit assistant that intelligently analyzes your code changes and generates clear, concise, and context-aware commit messages using Google's Gemini AI.
 
@@ -17,21 +22,14 @@
 
 ### Prerequisites
 - Node.js 20.0.0+
-- Yarn package manager
 - Git repository
 - [Gemini AI API key](https://makersuite.google.com/app/apikey)
 
 ### Installation
 
 ```bash
-# Clone and install locally
-git clone https://github.com/sojanvarghese/commit-x.git
-cd commit-x
-yarn install
-yarn build
-
-# Install globally (after building)
-yarn global add file:.
+# Install globally from npm
+npm install -g commitron
 ```
 
 ### Setup
@@ -42,6 +40,13 @@ cx setup
 
 # Or set API key directly
 export GEMINI_API_KEY="your_api_key_here"
+```
+
+### Uninstall
+
+```bash
+# Remove the package
+npm uninstall -g commitron
 ```
 
 ### Usage
@@ -90,7 +95,7 @@ cx commit --dry-run
 cx config
 
 # Set configuration values
-cx config set model gemini-1.5-flash
+cx config set model gemini-2.0-flash-lite
 
 # Reset to defaults
 cx config reset
@@ -101,27 +106,8 @@ cx config reset
 | Option | Type | Default | Description |
 |--------|------|---------|-------------|
 | `apiKey` | string | - | Gemini AI API key (use environment variable) |
-| `model` | string | `gemini-1.5-flash` | AI model to use |
+| `model` | string | `gemini-2.0-flash-lite` | AI model to use |
 
-
-### Available Scripts
-
-| Script | Description |
-|--------|-------------|
-| `yarn build` | Compile TypeScript |
-| `yarn dev` | Run CLI directly (development) |
-| `yarn lint` | Run ESLint |
-| `yarn format` | Format code with Prettier |
-| `yarn commit` | Process files individually |
-| `yarn commit:all` | Stage all files and commit together |
-| `yarn commit:dry` | Preview commits without executing |
-| `yarn status` | Show repository status |
-| `yarn diff` | Show changes summary |
-| `yarn config:get` | Get configuration values |
-| `yarn config:model` | Set AI model |
-| `yarn config:reset` | Reset configuration |
-| `yarn setup` | Interactive setup |
-| `yarn help` | Show usage examples |
 
 ## License
 
