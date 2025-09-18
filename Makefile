@@ -2,7 +2,7 @@
 
 # Default target
 help:
-	@echo "CommitX - AI-Powered Git Commit Assistant"
+	@echo "Commitron - AI-Powered Git Commit Assistant"
 	@echo "========================================="
 	@echo ""
 	@echo "Available targets:"
