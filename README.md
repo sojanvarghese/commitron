@@ -1,5 +1,3 @@
-# Commitron
-
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![version](https://img.shields.io/npm/v/commitron.svg)](https://www.npmjs.com/package/commitron)
 [![downloads](https://img.shields.io/npm/dm/commitron.svg)](https://www.npmjs.com/package/commitron)
