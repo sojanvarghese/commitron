@@ -49,12 +49,12 @@ chmod +x dist/cli.js
 
 # Optionally link globally
 echo ""
-read -p "🌍 Link CommitX globally? This allows you to use 'commit-x' from anywhere (y/N): " -n 1 -r
+read -p "🌍 Link CommitX globally? This allows you to use 'commitx' from anywhere (y/N): " -n 1 -r
 echo
 if [[ $REPLY =~ ^[Yy]$ ]]; then
     yarn global add file:.
     echo "✅ CommitX linked globally with Yarn"
-    echo "   You can now use: commit-x or cx"
+    echo "   You can now use: commitx or cx"
 else
     echo "ℹ️  To use CommitX, run: yarn cx or node dist/cli.js"
 fi
