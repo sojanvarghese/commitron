@@ -1,12 +1,38 @@
 {
-  "name": "commit-x",
+  "name": "commitx",
   "version": "1.0.0",
   "description": "AI-powered Git commit assistant that intelligently analyzes your code changes and generates clear, concise, and context-aware commit messages",
+  "keywords": [
+    "git",
+    "commit",
+    "ai",
+    "gemini",
+    "cli",
+    "typescript",
+    "automation"
+  ],
+  "homepage": "https://github.com/sojanvarghese/commitx#readme",
+  "bugs": {
+    "url": "https://github.com/sojanvarghese/commitx/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/sojanvarghese/commitx.git"
+  },
+  "license": "MIT",
+  "author": "Sojan Varghese (https://github.com/sojanvarghese)",
   "type": "module",
   "main": "dist/index.js",
+  "types": "./dist/index.d.ts",
   "bin": {
     "cx": "dist/cli.js"
   },
+  "files": [
+    "dist/**/*",
+    "README.md",
+    "LICENSE",
+    "package.json"
+  ],
   "scripts": {
     "build": "tsup",
     "build:watch": "tsup --watch",
@@ -27,32 +53,8 @@
     "config:reset": "yarn cx config reset",
     "setup": "yarn cx setup",
     "help": "yarn cx help-examples",
-    "uninstall": "npm uninstall -g commit-x"
+    "uninstall": "npm uninstall -g commitx"
   },
-  "packageManager": "yarn@4.9.4",
-  "keywords": [
-    "git",
-    "commit",
-    "ai",
-    "gemini",
-    "cli",
-    "typescript",
-    "automation"
-  ],
-  "author": {
-    "name": "Sojan Varghese",
-    "email": "sojan@example.com",
-    "url": "https://github.com/sojanvarghese"
-  },
-  "license": "MIT",
-  "repository": {
-    "type": "git",
-    "url": "https://github.com/sojanvarghese/commit-x.git"
-  },
-  "bugs": {
-    "url": "https://github.com/sojanvarghese/commit-x/issues"
-  },
-  "homepage": "https://github.com/sojanvarghese/commit-x#readme",
   "dependencies": {
     "@google/generative-ai": "^0.24.1",
     "chalk": "^5.6.2",
@@ -84,15 +86,10 @@
     "node": ">=20.0.0",
     "yarn": ">=4.0.0"
   },
-  "files": [
-    "dist/**/*",
-    "README.md",
-    "LICENSE",
-    "package.json"
-  ],
   "publishConfig": {
     "access": "public"
   },
+  "packageManager": "yarn@4.9.4",
   "lint-staged": {
     "src/**/*.{ts,js}": [
       "eslint --fix",
