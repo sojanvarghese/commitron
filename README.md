@@ -1,4 +1,4 @@
-# CommitX
+# Commitron
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
@@ -25,8 +25,8 @@
 
 ```bash
 # Clone and install locally
-git clone https://github.com/sojanvarghese/commitx.git
-cd commitx
+git clone https://github.com/sojanvarghese/commit-x.git
+cd commit-x
 yarn install
 yarn build
 
