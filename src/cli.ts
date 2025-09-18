@@ -175,7 +175,7 @@ program
   });
 
 // Configuration commands
-const configCmd = program.command('config').description('Manage CommitX configuration');
+const configCmd = program.command('config').description('Manage Commitron configuration');
 
 configCmd
   .command('set <key> <value>')
@@ -285,7 +285,7 @@ program
   .description('Interactive setup for first-time users')
   .action(async () => {
     const [inquirer, chalk] = await Promise.all([loadInquirer(), loadChalk()]);
-    console.log(chalk.blue('🚀 Welcome to CommitX Setup!\n'));
+    console.log(chalk.blue('🚀 Welcome to Commitron Setup!\n'));
 
     try {
       const config = ConfigManager.getInstance();
@@ -321,7 +321,7 @@ program
   .description('Show privacy settings and data handling information')
   .action(async (): Promise<void> => {
     const chalk = await loadChalk();
-    console.log(chalk.blue('🔒 CommitX Privacy Information:\n'));
+    console.log(chalk.blue('🔒 Commitron Privacy Information:\n'));
 
     console.log(chalk.yellow('Data Sent to AI:'));
     console.log('  • File paths (sanitized to remove usernames)');
@@ -364,7 +364,7 @@ program
   .description('Show usage examples')
   .action(async (): Promise<void> => {
     const [chalk, { pastel }] = await Promise.all([loadChalk(), loadGradientString()]);
-    console.log(pastel('📚 CommitX Usage Examples:\n'));
+    console.log(pastel('📚 Commitron Usage Examples:\n'));
 
     console.log(chalk.yellow('Basic usage:'));
     console.log('  cx                             # Process files with AI');
@@ -396,7 +396,7 @@ program
   .description('Debug Git repository detection and environment')
   .action(async (): Promise<void> => {
     const chalk = await loadChalk();
-    console.log(chalk.blue('\n🔍 CommitX Debug Information:\n'));
+    console.log(chalk.blue('\n🔍 Commitron Debug Information:\n'));
 
     console.log(chalk.gray('Environment:'));
     console.log(`  Current working directory: ${process.cwd()}`);
