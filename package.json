@@ -1,6 +1,6 @@
 {
-  "name": "commitron",
-  "version": "1.0.1",
+  "name": "@sojanvarghese/commit-x",
+  "version": "1.0.2",
   "description": "AI-powered Git commit assistant that intelligently analyzes your code changes and generates clear, concise, and context-aware commit messages",
   "keywords": [
     "git",
@@ -11,13 +11,13 @@
     "typescript",
     "automation"
   ],
-  "homepage": "https://github.com/sojanvarghese/commitron#readme",
+  "homepage": "https://github.com/sojanvarghese/commit-x#readme",
   "bugs": {
-    "url": "https://github.com/sojanvarghese/commitron/issues"
+    "url": "https://github.com/sojanvarghese/commit-x/issues"
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/sojanvarghese/commitron.git"
+    "url": "git+https://github.com/sojanvarghese/commit-x.git"
   },
   "license": "MIT",
   "author": "Sojan Varghese (https://github.com/sojanvarghese)",

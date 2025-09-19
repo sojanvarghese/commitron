@@ -1,9 +1,11 @@
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![version](https://img.shields.io/npm/v/commitron.svg)](https://www.npmjs.com/package/commitron)
-[![downloads](https://img.shields.io/npm/dm/commitron.svg)](https://www.npmjs.com/package/commitron)
-[![Node.js](https://img.shields.io/node/v/commitron.svg)](https://nodejs.org/)
-[![TypeScript](https://img.shields.io/badge/TypeScript-007ACC?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
-
+[![License](https://badgen.net/badge/license/MIT/blue)](https://opensource.org/licenses/MIT)
+[![NPM Version](https://badgen.net/npm/v/@sojanvarghese/commit-x)](https://www.npmjs.com/package/@sojanvarghese/commit-x)
+[![NPM Downloads](https://badgen.net/npm/dw/@sojanvarghese/commit-x)](https://www.npmjs.com/package/@sojanvarghese/commit-x)
+[![Node.js](https://badgen.net/badge/node/20.0.0+/green)](https://nodejs.org/)
+[![TypeScript](https://badgen.net/badge/TypeScript/5.9.2/blue)](https://www.typescriptlang.org/)
+[![Yarn](https://badgen.net/badge/yarn/4.9.4+/blue)](https://yarnpkg.com/)
+[![AI](https://badgen.net/badge/AI/Gemini/4285F4)](https://ai.google.dev/)
+[![CLI](https://badgen.net/badge/CLI/Tool/green)](https://en.wikipedia.org/wiki/Command-line_interface)
 
 > AI-powered Git commit assistant that intelligently analyzes your code changes and generates clear, concise, and context-aware commit messages using Google's Gemini AI.
 
@@ -27,7 +29,7 @@
 
 ```bash
 # Install globally from npm
-npm install -g commitron
+npm install -g @sojanvarghese/commit-x
 ```
 
 ### Setup
@@ -44,7 +46,7 @@ export GEMINI_API_KEY="your_api_key_here"
 
 ```bash
 # Remove the package
-npm uninstall -g commitron
+npm uninstall -g @sojanvarghese/commit-x
 ```
 
 ### Usage
