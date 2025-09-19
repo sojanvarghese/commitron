@@ -7,7 +7,9 @@ export class PerformanceMonitor {
   private readonly startTimes = new Map<string, number>();
   private readonly metrics = new Map<string, { count: number; totalTime: number; avgTime: number }>();
 
-  private constructor() {}
+  private constructor() {
+    // Private constructor for singleton pattern
+  }
 
   public static getInstance(): PerformanceMonitor {
     if (!PerformanceMonitor.instance) {
@@ -82,19 +84,6 @@ export const withPerformanceTracking = async <T>(
   }
 };
 
-// Memory usage monitoring
-export const logMemoryUsage = (label?: string): void => {
-  if (PERFORMANCE_FLAGS.ENABLE_PERFORMANCE_MONITORING) {
-    const used = process.memoryUsage();
-    const formatMB = (bytes: number): number => Math.round(bytes / 1024 / 1024 * 100) / 100;
-
-    console.log(`📊 Memory Usage${label ? ` (${label})` : ''}:`);
-    console.log(`  RSS: ${formatMB(used.rss)} MB`);
-    console.log(`  Heap Used: ${formatMB(used.heapUsed)} MB`);
-    console.log(`  Heap Total: ${formatMB(used.heapTotal)} MB`);
-    console.log(`  External: ${formatMB(used.external)} MB`);
-  }
-};
 
 // Force garbage collection if available
 export const forceGarbageCollection = (): void => {
