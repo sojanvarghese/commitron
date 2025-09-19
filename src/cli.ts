@@ -8,6 +8,7 @@ import { readFileSync } from 'fs';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import process from 'process';
+import chalk from 'chalk';
 import { ConfigManager } from './config.js';
 import type { CommitConfig } from './types/common.js';
 import { CommitMessageSchema, CommitConfigSchema } from './schemas/validation.js';
@@ -26,21 +27,19 @@ if (PERFORMANCE_FLAGS.ENABLE_PERFORMANCE_MONITORING) {
   });
 }
 
-let chalkCache: any = null;
-let inquirerCache: any = null;
-let gradientStringCache: any = null;
+// Type definitions for dynamic imports
+type InquirerModule = typeof import('inquirer');
+type GradientStringModule = typeof import('gradient-string');
 
-const loadChalk = async (): Promise<any> => {
-  chalkCache ??= (await import('chalk')).default;
-  return chalkCache;
-};
+let inquirerCache: InquirerModule | null = null;
+let gradientStringCache: GradientStringModule | null = null;
 
-const loadInquirer = async (): Promise<any> => {
+const loadInquirer = async (): Promise<InquirerModule> => {
   inquirerCache ??= await import('inquirer');
   return inquirerCache;
 };
 
-const loadGradientString = async (): Promise<any> => {
+const loadGradientString = async (): Promise<GradientStringModule> => {
   gradientStringCache ??= await import('gradient-string');
   return gradientStringCache;
 };
@@ -95,7 +94,6 @@ program
         async (): Promise<void> => {
           // Validate command combinations
           if (options.interactive && !options.all) {
-            const chalk = await loadChalk();
             console.error(chalk.red('❌ Error: --interactive option can only be used with --all flag'));
             console.log(chalk.yellow('\n💡 Correct usage:'));
             console.log(chalk.blue('  cx commit --all --interactive    # Interactive traditional workflow'));
@@ -199,7 +197,6 @@ configCmd
         const parsedValue = parseConfigValue(value);
 
         await config.set(key as keyof CommitConfig, parsedValue);
-        const chalk = await loadChalk();
         console.log(chalk.green(`✅ Set ${key} = ${parsedValue}`));
       },
       { operation: 'configSet', key }
@@ -232,7 +229,6 @@ configCmd
         } else {
           const allConfig = config.getConfig();
           const apiKey = config.getApiKey();
-          const chalk = await loadChalk();
 
           console.log(chalk.blue('Current configuration:'));
           for (const [k, v] of Object.entries(allConfig)) {
@@ -255,7 +251,7 @@ configCmd
   .description('Reset configuration to defaults')
   .action(async () => {
     try {
-      const [inquirer, chalk] = await Promise.all([loadInquirer(), loadChalk()]);
+      const inquirer = await loadInquirer();
       const { confirm } = await inquirer.prompt([
         {
           type: 'confirm',
@@ -273,7 +269,6 @@ configCmd
         console.log(chalk.yellow('Reset cancelled'));
       }
     } catch (error) {
-      const chalk = await loadChalk();
       console.error(chalk.red(`Error: ${error}`));
       process.exit(1);
     }
@@ -284,7 +279,7 @@ program
   .command('setup')
   .description('Interactive setup for first-time users')
   .action(async () => {
-    const [inquirer, chalk] = await Promise.all([loadInquirer(), loadChalk()]);
+    const inquirer = await loadInquirer();
     console.log(chalk.blue('🚀 Welcome to Commitron Setup!\n'));
 
     try {
@@ -320,7 +315,6 @@ program
   .command('privacy')
   .description('Show privacy settings and data handling information')
   .action(async (): Promise<void> => {
-    const chalk = await loadChalk();
     console.log(chalk.blue('🔒 Commitron Privacy Information:\n'));
 
     console.log(chalk.yellow('Data Sent to AI:'));
@@ -363,7 +357,7 @@ program
   .command('help-examples')
   .description('Show usage examples')
   .action(async (): Promise<void> => {
-    const [chalk, { pastel }] = await Promise.all([loadChalk(), loadGradientString()]);
+    const { pastel } = await loadGradientString();
     console.log(pastel('📚 Commitron Usage Examples:\n'));
 
     console.log(chalk.yellow('Basic usage:'));
@@ -395,7 +389,6 @@ program
   .command('debug')
   .description('Debug Git repository detection and environment')
   .action(async (): Promise<void> => {
-    const chalk = await loadChalk();
     console.log(chalk.blue('\n🔍 Commitron Debug Information:\n'));
 
     console.log(chalk.gray('Environment:'));
@@ -445,7 +438,6 @@ program.action(async (): Promise<void> => {
     const commitX = new CommitX();
     await commitX.commit(); // Uses AI processing by default
   } catch (error) {
-    const chalk = await loadChalk();
     console.error(chalk.red(`Error: ${error}`));
     process.exit(1);
   }
@@ -453,7 +445,6 @@ program.action(async (): Promise<void> => {
 
 // Error handling for unknown commands
 program.on('command:*', async (): Promise<void> => {
-  const chalk = await loadChalk();
   console.error(chalk.red(`❌ Unknown command: ${program.args.join(' ')}`));
   console.log(chalk.yellow('\n💡 Available commands:'));
   console.log(chalk.blue('  cx --help              # Show all available commands'));
@@ -465,7 +456,6 @@ program.on('command:*', async (): Promise<void> => {
 
 // Error handling for invalid options
 program.on('option:*', async (): Promise<void> => {
-  const chalk = await loadChalk();
   console.error(chalk.red(`❌ Unknown option: ${program.args.join(' ')}`));
   console.log(chalk.yellow('\n💡 Available options:'));
   console.log(chalk.blue('  cx --help              # Show all available commands'));
@@ -494,7 +484,6 @@ if (process.argv.length === 2) {
         await commitX.commit();
       });
     } catch (error) {
-      const chalk = await loadChalk();
       console.error(chalk.red(`Error: ${error}`));
       process.exit(1);
     }
