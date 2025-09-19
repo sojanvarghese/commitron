@@ -150,10 +150,17 @@ export const shouldSkipFileForAI = (
   content: string
 ): { skip: boolean; reason?: string } => {
   // Skip sensitive file types
-  const sensitiveExtensions = ['.env', '.key', '.pem', '.p12', '.pfx', '.p8', '.json'];
+  const sensitiveExtensions = ['.env', '.key', '.pem', '.p12', '.pfx', '.p8'];
+  const sensitiveJsonFiles = ['secrets.json', 'credentials.json', 'config.json'];
   const ext = path.extname(filePath).toLowerCase();
+  const fileName = path.basename(filePath).toLowerCase();
 
   if (sensitiveExtensions.includes(ext)) {
+    return { skip: true, reason: 'Sensitive file type' };
+  }
+
+  // Skip specific sensitive JSON files, but allow standard config files
+  if (ext === '.json' && sensitiveJsonFiles.includes(fileName)) {
     return { skip: true, reason: 'Sensitive file type' };
   }
 
