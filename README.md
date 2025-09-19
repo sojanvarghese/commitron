@@ -1,7 +1,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![version](https://img.shields.io/npm/v/commitron.svg)](https://www.npmjs.com/package/commitron)
-[![downloads](https://img.shields.io/npm/dm/commitron.svg)](https://www.npmjs.com/package/commitron)
-[![Node.js](https://img.shields.io/node/v/commitron.svg)](https://nodejs.org/)
+[![version](https://img.shields.io/npm/v/@sojanvarghese/commit-x.svg)](https://www.npmjs.com/package/@sojanvarghese/commit-x)
+[![downloads](https://img.shields.io/npm/dm/@sojanvarghese/commit-x.svg)](https://www.npmjs.com/package/@sojanvarghese/commit-x)
+[![Node.js](https://img.shields.io/node/v/@sojanvarghese/commit-x.svg)](https://nodejs.org/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-007ACC?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
 
 
@@ -27,7 +27,7 @@
 
 ```bash
 # Install globally from npm
-npm install -g commitron
+npm install -g @sojanvarghese/commit-x
 ```
 
 ### Setup
@@ -44,7 +44,7 @@ export GEMINI_API_KEY="your_api_key_here"
 
 ```bash
 # Remove the package
-npm uninstall -g commitron
+npm uninstall -g @sojanvarghese/commit-x
 ```
 
 ### Usage
