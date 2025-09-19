@@ -1,5 +1,5 @@
 {
-  "name": "commitron",
+  "name": "@sojanvarghese/commit-x",
   "version": "1.0.1",
   "description": "AI-powered Git commit assistant that intelligently analyzes your code changes and generates clear, concise, and context-aware commit messages",
   "keywords": [
@@ -11,13 +11,13 @@
     "typescript",
     "automation"
   ],
-  "homepage": "https://github.com/sojanvarghese/commitron#readme",
+  "homepage": "https://github.com/sojanvarghese/commit-x#readme",
   "bugs": {
-    "url": "https://github.com/sojanvarghese/commitron/issues"
+    "url": "https://github.com/sojanvarghese/commit-x/issues"
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/sojanvarghese/commitron.git"
+    "url": "git+https://github.com/sojanvarghese/commit-x.git"
   },
   "license": "MIT",
   "author": "Sojan Varghese (https://github.com/sojanvarghese)",
@@ -53,7 +53,7 @@
     "config:reset": "yarn cx config reset",
     "setup": "yarn cx setup",
     "help": "yarn cx help-examples",
-    "uninstall": "npm uninstall -g commitron"
+    "uninstall": "npm uninstall -g commit-x"
   },
   "dependencies": {
     "@google/generative-ai": "^0.24.1",
