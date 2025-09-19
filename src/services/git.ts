@@ -217,7 +217,7 @@ export class GitService {
             }
 
             throw new SecureError(
-              diffValidation.error!,
+              diffValidation.error ?? 'Validation failed',
               ErrorType.VALIDATION_ERROR,
               { operation: 'getFileDiff', file: validatedFile },
               true
