@@ -3,7 +3,9 @@
 [![downloads](https://img.shields.io/npm/dm/@sojanvarghese/commit-x.svg)](https://www.npmjs.com/package/@sojanvarghese/commit-x)
 [![Node.js](https://img.shields.io/node/v/@sojanvarghese/commit-x.svg)](https://nodejs.org/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-007ACC?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
-
+[![Yarn](https://img.shields.io/badge/Yarn-4.9.4+-2C8EBB?logo=yarn&logoColor=white)](https://yarnpkg.com/)
+[![AI Powered](https://img.shields.io/badge/AI-Powered-FF6B6B?logo=openai&logoColor=white)](https://ai.google.dev/)
+[![CLI](https://img.shields.io/badge/CLI-Tool-4CAF50?logo=terminal&logoColor=white)](https://en.wikipedia.org/wiki/Command-line_interface)
 
 > AI-powered Git commit assistant that intelligently analyzes your code changes and generates clear, concise, and context-aware commit messages using Google's Gemini AI.
 
