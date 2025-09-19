@@ -63,7 +63,6 @@
     "ora": "^9.0.0",
     "simple-git": "^3.28.0",
     "ts-pattern": "^5.8.0",
-    "tsup": "^8.5.0",
     "type-fest": "^5.0.0",
     "zod": "^4.1.9"
   },
@@ -80,6 +79,7 @@
     "lint-staged": "16.1.6",
     "prettier": "3.6.2",
     "ts-node": "10.9.2",
+    "tsup": "^8.5.0",
     "typescript": "5.9.2"
   },
   "engines": {
