@@ -54,26 +54,6 @@ export const CommitSuggestionSchema = z.object({
   confidence: z.number().min(0).max(1).default(0.8),
 });
 
-// Git status schema
-
-// Commit options schema
-export const CommitOptionsSchema = z.object({
-  message: z.string().optional(),
-  dryRun: z.boolean().optional(),
-  interactive: z.boolean().optional(),
-  all: z.boolean().optional(),
-});
-
-// Playwright patterns schema
-export const PlaywrightPatternsSchema = z.object({
-  isPOM: z.boolean(),
-  isSpec: z.boolean(),
-  isFixture: z.boolean(),
-  isConfig: z.boolean(),
-  isUtil: z.boolean(),
-  testType: z.enum(['unit', 'integration', 'e2e', 'unknown']),
-});
-
 // File path validation schema
 export const FilePathSchema = z
   .string()
