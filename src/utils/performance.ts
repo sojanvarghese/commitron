@@ -83,11 +83,3 @@ export const withPerformanceTracking = async <T>(
     throw error;
   }
 };
-
-
-// Force garbage collection if available
-export const forceGarbageCollection = (): void => {
-  if (global.gc && PERFORMANCE_FLAGS.ENABLE_PERFORMANCE_MONITORING) {
-    global.gc();
-  }
-};
