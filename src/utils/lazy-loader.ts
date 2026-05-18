@@ -29,10 +29,6 @@ export const createLazyModule = <T>(
 export const lazyModules = {
   // Lightweight UI alternatives (prioritized over heavy deps)
   inquirer: createLazyModule("inquirer", () => import("./prompts.js")),
-  gradientString: createLazyModule(
-    "gradient-string",
-    () => import("gradient-string")
-  ),
 
   // Core services (loaded on demand)
   commitX: createLazyModule("commitX", () => import("../core/commitx.js")),

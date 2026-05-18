@@ -6,7 +6,7 @@ export default defineConfig({
   target: 'node22',
   outDir: 'dist',
   clean: true,
-  dts: true,
+  dts: false,
   sourcemap: 'inline', // Use inline sourcemaps for better performance
   minify: true, // Enable minification for smaller bundles
   splitting: true, // Enable code splitting for better chunk loading
@@ -15,9 +15,6 @@ export default defineConfig({
     '@google/genai',
     'commander',
     'simple-git',
-    'gradient-string',
-    'ts-pattern',
-    'zod',
   ],
   esbuildOptions(options) {
     options.treeShaking = true;

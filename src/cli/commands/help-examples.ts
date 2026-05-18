@@ -1,14 +1,12 @@
 import type { Command } from "commander";
 import { lightColors } from "../../utils/colors.js";
-import { lazyModules } from "../../utils/lazy-loader.js";
 
 export const registerHelpExamplesCommand = (program: Command): void => {
   program
     .command("help-examples")
     .description("Show usage examples")
     .action(async (): Promise<void> => {
-      const gradientString = await lazyModules.gradientString();
-      console.log(`${gradientString.pastel("📚 Commit-X Usage Examples:\n")}
+      console.log(`${lightColors.magenta("📚 Commit-X Usage Examples:\n")}
 
 ${lightColors.yellow("Basic usage:")}
   cx                             # Process files with AI
