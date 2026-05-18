@@ -19,6 +19,7 @@ export * as fileClassifier from "./utils/file-classifier.js";
 export * as aiPrivacyGate from "./services/ai-privacy-gate.js";
 export * as aiPrompt from "./services/ai-prompt.js";
 export * as aiCommitGroup from "./services/ai-commit-group.js";
+export * as validation from "./schemas/validation.js";
 
 const getCommitX = async (): Promise<
   typeof import("./core/commitx.js").CommitX

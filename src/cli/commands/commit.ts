@@ -1,5 +1,6 @@
 import process from "process";
 import type { Command } from "commander";
+import * as v from "valibot";
 import { lightColors } from "../../utils/colors.js";
 import { lazyModules } from "../../utils/lazy-loader.js";
 
@@ -31,16 +32,16 @@ const validateMessage = async (message: string): Promise<string> => {
   const { ErrorType } = await import("../../types/error-handler.js");
   const { SecureError } = await import("../../utils/error-handler.js");
 
-  const result = CommitMessageSchema.safeParse(message);
+  const result = v.safeParse(CommitMessageSchema, message);
   if (!result.success) {
     throw new SecureError(
-      `Invalid commit message: ${result.error.issues.map(e => e.message).join(", ")}`,
+      `Invalid commit message: ${result.issues.map(e => e.message).join(", ")}`,
       ErrorType.VALIDATION_ERROR,
       { operation: "commit" },
       true
     );
   }
-  return result.data;
+  return result.output;
 };
 
 export const registerCommitCommand = (program: Command): void => {

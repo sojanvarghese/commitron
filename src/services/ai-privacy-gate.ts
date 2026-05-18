@@ -1,4 +1,5 @@
 import type { GitDiff } from "../types/common.js";
+import * as v from "valibot";
 import {
   sanitizeGitDiff,
   shouldSkipFileForAI,
@@ -42,16 +43,16 @@ export const enforcePrivacyGate = (
       continue;
     }
 
-    const validated = GitDiffSchema.safeParse(diff);
+    const validated = v.safeParse(GitDiffSchema, diff);
     if (!validated.success) {
       skippedFiles.push({
         file: diff.file,
-        reason: `Invalid diff: ${validated.error.issues.map(i => i.message).join(", ")}`,
+        reason: `Invalid diff: ${validated.issues.map(i => i.message).join(", ")}`,
       });
       continue;
     }
 
-    approvedDiffs.push(validated.data);
+    approvedDiffs.push(validated.output);
   }
 
   const sanitizedDiffs = approvedDiffs.map(diff =>

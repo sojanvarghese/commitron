@@ -1,74 +1,42 @@
-import { z } from "zod";
+import * as v from "valibot";
 
-// Base validation schemas
-export const ApiKeySchema = z
-  .string()
-  .min(10, "API key must be at least 10 characters long")
-  .max(200, "API key must be 200 characters or less")
-  .regex(/^[A-Za-z0-9_-]+$/, "API key contains invalid characters")
-  .transform(val => val.trim());
+export const ApiKeySchema = v.pipe(
+  v.string(),
+  v.minLength(10, "API key must be at least 10 characters long"),
+  v.maxLength(200, "API key must be 200 characters or less"),
+  v.regex(/^[A-Za-z0-9_-]+$/, "API key contains invalid characters"),
+  v.transform(val => val.trim())
+);
 
-// Configuration schema (model is fixed in code; not stored in user config)
-export const CommitConfigSchema = z.object({
-  apiKey: ApiKeySchema.optional(),
+export const CommitConfigSchema = v.object({
+  apiKey: v.optional(ApiKeySchema),
 });
 
-// Git diff schema
-export const GitDiffSchema = z.object({
-  file: z.string().min(1, "File path is required"),
-  additions: z.number().int().min(0, "Additions must be non-negative"),
-  deletions: z.number().int().min(0, "Deletions must be non-negative"),
-  changes: z.string(),
-  isNew: z.boolean().default(false),
-  isDeleted: z.boolean().default(false),
-  isRenamed: z.boolean().default(false),
-  oldPath: z.string().optional(),
+export const GitDiffSchema = v.object({
+  file: v.pipe(v.string(), v.minLength(1, "File path is required")),
+  additions: v.pipe(
+    v.number(),
+    v.integer(),
+    v.minValue(0, "Additions must be non-negative")
+  ),
+  deletions: v.pipe(
+    v.number(),
+    v.integer(),
+    v.minValue(0, "Deletions must be non-negative")
+  ),
+  changes: v.string(),
+  isNew: v.optional(v.boolean(), false),
+  isDeleted: v.optional(v.boolean(), false),
+  isRenamed: v.optional(v.boolean(), false),
+  oldPath: v.optional(v.string()),
 });
 
-// Commit suggestion schema
-export const CommitSuggestionSchema = z.object({
-  message: z.string().min(1, "Commit message is required"),
-  description: z.string().optional(),
-  type: z.string().optional(),
-  scope: z.string().optional(),
-  confidence: z.number().min(0).max(1).default(0.8),
-});
-
-// File path validation schema
-export const FilePathSchema = z
-  .string()
-  .min(1, "File path is required")
-  .refine(
-    (
-      path // Check for path traversal attempts
-    ) => !path.includes("..") && !path.includes("~") && !path.startsWith("/"),
-    "Path traversal detected: file path is outside allowed directory"
-  )
-  .refine(
-    path =>
-      [
-        /\.\./,
-        /~/,
-        /\/etc\//,
-        /\/proc\//,
-        /\/sys\//,
-        /\/dev\//,
-        /\.env/,
-        /\.ssh/,
-        /\.aws/,
-        /\.config/,
-        /\.git\//,
-      ].some(pattern => pattern.test(path)),
-    "Suspicious path pattern detected"
-  );
-
-// Commit message validation schema
-export const CommitMessageSchema = z
-  .string()
-  .min(1, "Commit message must be a non-empty string")
-  .max(200, "Commit message must be 200 characters or less")
-  .refine(msg => msg.trim().length > 0, "Commit message cannot be empty")
-  .refine(
+export const CommitMessageSchema = v.pipe(
+  v.string(),
+  v.minLength(1, "Commit message must be a non-empty string"),
+  v.maxLength(200, "Commit message must be 200 characters or less"),
+  v.check(msg => msg.trim().length > 0, "Commit message cannot be empty"),
+  v.check(
     message =>
       [
         /<script/i,
@@ -81,13 +49,9 @@ export const CommitMessageSchema = z
         /<iframe/i,
       ].some(pattern => pattern.test(message)),
     "Commit message contains potentially malicious content"
-  )
-  .transform(val => val.trim());
-
-// Diff content validation schema
-export const DiffContentSchema = z
-  .string()
-  .max(100000, "Diff content size exceeds limit of 100,000 characters");
+  ),
+  v.transform(val => val.trim())
+);
 
 // Validation result type
 export type ValidationResult<T = unknown> = {
@@ -95,17 +59,3 @@ export type ValidationResult<T = unknown> = {
   error?: string;
   sanitizedValue?: T;
 };
-
-// Type-safe configuration validation
-export type ValidatedCommitConfig = z.infer<typeof CommitConfigSchema>;
-export type ValidatedGitDiff = z.infer<typeof GitDiffSchema>;
-export type ValidatedCommitSuggestion = z.infer<typeof CommitSuggestionSchema>;
-
-// Type exports for use throughout the application
-export type {
-  CommitConfig,
-  GitDiff,
-  CommitSuggestion,
-  GitStatus,
-  CommitOptions,
-} from "../types/common.js";
