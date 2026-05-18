@@ -1,5 +1,4 @@
 import { lightColors } from "./colors.js";
-import { match } from "ts-pattern";
 import { sanitizeError } from "./security.js";
 import {
   ERROR_LOG_LIMIT,
@@ -8,6 +7,10 @@ import {
   ERROR_PATTERNS,
 } from "../constants/error-handler.js";
 import { ErrorType, type ErrorContext } from "../types/error-handler.js";
+
+const assertNever = (value: never): never => {
+  throw new Error(`Unhandled error type: ${String(value)}`);
+};
 
 export class SecureError extends Error {
   public readonly type: ErrorType;
@@ -31,46 +34,28 @@ export class SecureError extends Error {
   }
 
   private getDefaultUserMessage(): string {
-    return match(this.type)
-      .with(
-        ErrorType.VALIDATION_ERROR,
-        () => "Invalid input provided. Please check your input and try again."
-      )
-      .with(
-        ErrorType.SECURITY_ERROR,
-        () =>
-          "Security validation failed. Please check your input for suspicious content."
-      )
-      .with(
-        ErrorType.NETWORK_ERROR,
-        () =>
-          "Network connection failed. Please check your internet connection and try again."
-      )
-      .with(
-        ErrorType.FILE_SYSTEM_ERROR,
-        () =>
-          "File operation failed. Please check file permissions and try again."
-      )
-      .with(
-        ErrorType.GIT_ERROR,
-        () =>
-          "Git operation failed. Please ensure you are in a valid git repository."
-      )
-      .with(
-        ErrorType.AI_SERVICE_ERROR,
-        () => "AI service failed. Please check your API key and try again."
-      )
-      .with(
-        ErrorType.CONFIG_ERROR,
-        () =>
-          "Configuration error. Please run setup again or check your configuration."
-      )
-      .with(
-        ErrorType.TIMEOUT_ERROR,
-        () =>
-          "Operation timed out. Please try again with a smaller file or check your connection."
-      )
-      .otherwise(() => "An unexpected error occurred. Please try again.");
+    switch (this.type) {
+      case ErrorType.VALIDATION_ERROR:
+        return "Invalid input provided. Please check your input and try again.";
+      case ErrorType.SECURITY_ERROR:
+        return "Security validation failed. Please check your input for suspicious content.";
+      case ErrorType.NETWORK_ERROR:
+        return "Network connection failed. Please check your internet connection and try again.";
+      case ErrorType.FILE_SYSTEM_ERROR:
+        return "File operation failed. Please check file permissions and try again.";
+      case ErrorType.GIT_ERROR:
+        return "Git operation failed. Please ensure you are in a valid git repository.";
+      case ErrorType.AI_SERVICE_ERROR:
+        return "AI service failed. Please check your API key and try again.";
+      case ErrorType.CONFIG_ERROR:
+        return "Configuration error. Please run setup again or check your configuration.";
+      case ErrorType.TIMEOUT_ERROR:
+        return "Operation timed out. Please try again with a smaller file or check your connection.";
+      case ErrorType.UNKNOWN_ERROR:
+        return "An unexpected error occurred. Please try again.";
+      default:
+        return assertNever(this.type);
+    }
   }
 }
 
@@ -114,37 +99,27 @@ export class ErrorHandler {
     const message = (error as Error)?.message ?? "Unknown error occurred";
     const sanitizedMessage = sanitizeError(message);
 
-    // Use pattern matching for error type detection
-    const errorType = match((error as { code?: string })?.code)
-      .with(
-        "ENOENT",
-        "EACCES",
-        "EPERM",
-        "ENOTDIR",
-        "EISDIR",
-        () => ErrorType.FILE_SYSTEM_ERROR
-      )
-      .with(
-        "ECONNREFUSED",
-        "ENOTFOUND",
-        "ETIMEDOUT",
-        () => ErrorType.NETWORK_ERROR
-      )
-      .otherwise(() => this.detectErrorTypeFromMessage(message));
+    const errorCode = (error as { code?: string })?.code;
+    let errorType: ErrorType;
+    switch (errorCode) {
+      case "ENOENT":
+      case "EACCES":
+      case "EPERM":
+      case "ENOTDIR":
+      case "EISDIR":
+        errorType = ErrorType.FILE_SYSTEM_ERROR;
+        break;
+      case "ECONNREFUSED":
+      case "ENOTFOUND":
+      case "ETIMEDOUT":
+        errorType = ErrorType.NETWORK_ERROR;
+        break;
+      default:
+        errorType = this.detectErrorTypeFromMessage(message);
+        break;
+    }
 
-    const isRecoverable = match(errorType)
-      .with(
-        ErrorType.FILE_SYSTEM_ERROR,
-        ErrorType.NETWORK_ERROR,
-        ErrorType.TIMEOUT_ERROR,
-        ErrorType.VALIDATION_ERROR,
-        ErrorType.GIT_ERROR,
-        ErrorType.AI_SERVICE_ERROR,
-        ErrorType.CONFIG_ERROR,
-        () => true
-      )
-      .with(ErrorType.SECURITY_ERROR, ErrorType.UNKNOWN_ERROR, () => false)
-      .exhaustive();
+    const isRecoverable = this.isRecoverableError(errorType);
 
     return new SecureError(sanitizedMessage, errorType, context, isRecoverable);
   };
@@ -199,22 +174,42 @@ export class ErrorHandler {
   private readonly getErrorColor = (
     type: ErrorType
   ): ((text: string) => string) => {
-    return match(type)
-      .with(ErrorType.SECURITY_ERROR, () => lightColors.red)
-      .with(
-        ErrorType.VALIDATION_ERROR,
-        ErrorType.CONFIG_ERROR,
-        () => lightColors.yellow
-      )
-      .with(
-        ErrorType.NETWORK_ERROR,
-        ErrorType.TIMEOUT_ERROR,
-        ErrorType.AI_SERVICE_ERROR,
-        () => lightColors.blue
-      )
-      .with(ErrorType.FILE_SYSTEM_ERROR, () => lightColors.cyan)
-      .with(ErrorType.GIT_ERROR, () => lightColors.green)
-      .otherwise(() => lightColors.red);
+    switch (type) {
+      case ErrorType.SECURITY_ERROR:
+      case ErrorType.UNKNOWN_ERROR:
+        return lightColors.red;
+      case ErrorType.VALIDATION_ERROR:
+      case ErrorType.CONFIG_ERROR:
+        return lightColors.yellow;
+      case ErrorType.NETWORK_ERROR:
+      case ErrorType.TIMEOUT_ERROR:
+      case ErrorType.AI_SERVICE_ERROR:
+        return lightColors.blue;
+      case ErrorType.FILE_SYSTEM_ERROR:
+        return lightColors.cyan;
+      case ErrorType.GIT_ERROR:
+        return lightColors.green;
+      default:
+        return assertNever(type);
+    }
+  };
+
+  private readonly isRecoverableError = (type: ErrorType): boolean => {
+    switch (type) {
+      case ErrorType.FILE_SYSTEM_ERROR:
+      case ErrorType.NETWORK_ERROR:
+      case ErrorType.TIMEOUT_ERROR:
+      case ErrorType.VALIDATION_ERROR:
+      case ErrorType.GIT_ERROR:
+      case ErrorType.AI_SERVICE_ERROR:
+      case ErrorType.CONFIG_ERROR:
+        return true;
+      case ErrorType.SECURITY_ERROR:
+      case ErrorType.UNKNOWN_ERROR:
+        return false;
+      default:
+        return assertNever(type);
+    }
   };
 
   public handleProcessExit = (code: number = 1): void => {
