@@ -29,9 +29,9 @@ export const registerConfigCommand = (program: Command): void => {
           const { ErrorType } = await import("../../types/error-handler.js");
           const { ConfigManager } = await lazyModules.config();
 
-          if (!(key in CommitConfigSchema.shape)) {
+          if (!(key in CommitConfigSchema.entries)) {
             throw new SecureError(
-              `Invalid configuration key: ${key}. Allowed keys: ${Object.keys(CommitConfigSchema.shape).join(", ")}`,
+              `Invalid configuration key: ${key}. Allowed keys: ${Object.keys(CommitConfigSchema.entries).join(", ")}`,
               ErrorType.VALIDATION_ERROR,
               { operation: "configSet", key },
               true
@@ -67,7 +67,7 @@ export const registerConfigCommand = (program: Command): void => {
           const { ErrorType } = await import("../../types/error-handler.js");
 
           const config = ConfigManager.getInstance();
-          const allKeys = Object.keys(CommitConfigSchema.shape);
+          const allKeys = Object.keys(CommitConfigSchema.entries);
 
           if (key) {
             if (!allKeys.includes(key)) {

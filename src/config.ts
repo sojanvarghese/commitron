@@ -2,6 +2,7 @@ import * as fs from "fs";
 import * as path from "path";
 import * as os from "os";
 import process from "process";
+import * as v from "valibot";
 import { CommitConfigSchema, ApiKeySchema } from "./schemas/validation.js";
 import type { CommitConfig } from "./types/common.js";
 import { sanitizeError } from "./utils/security.js";
@@ -44,14 +45,13 @@ export class ConfigManager {
         const configData = fs.readFileSync(CONFIG_FILE, "utf-8");
         const userConfig = JSON.parse(configData);
 
-        // Validate loaded configuration using Zod
-        const result = CommitConfigSchema.safeParse(userConfig);
+        const result = v.safeParse(CommitConfigSchema, userConfig);
         if (result.success) {
-          return { ...result.data };
+          return { ...result.output };
         } else {
           console.warn(
             "Invalid config data, using defaults:",
-            result.error.issues
+            result.issues
           );
         }
       }
@@ -68,18 +68,17 @@ export class ConfigManager {
   public saveConfig = async (config: Partial<CommitConfig>): Promise<void> => {
     await withErrorHandling(
       async (): Promise<void> => {
-        // Validate configuration before saving using Zod
-        const result = CommitConfigSchema.partial().safeParse(config);
+        const result = v.safeParse(v.partial(CommitConfigSchema), config);
         if (!result.success) {
           throw new SecureError(
-            `Invalid configuration: ${result.error.issues.map((e: { message: string }) => e.message).join(", ")}`,
+            `Invalid configuration: ${result.issues.map((e: { message: string }) => e.message).join(", ")}`,
             ErrorType.VALIDATION_ERROR,
             { operation: "saveConfig" },
             true
           );
         }
 
-        this.config = { ...this.config, ...result.data };
+        this.config = { ...this.config, ...result.output };
 
         if (!fs.existsSync(CONFIG_DIR)) {
           fs.mkdirSync(CONFIG_DIR, { recursive: true });
@@ -112,19 +111,18 @@ export class ConfigManager {
   ): Promise<void> => {
     await withErrorHandling(
       async (): Promise<void> => {
-        // Validate the specific key-value pair using Zod
-        const result = CommitConfigSchema.shape[key].safeParse(value);
+        const result = v.safeParse(CommitConfigSchema.entries[key], value);
 
         if (!result.success) {
           throw new SecureError(
-            `Invalid value for ${key}: ${result.error.issues.map((e: { message: string }) => e.message).join(", ")}`,
+            `Invalid value for ${key}: ${result.issues.map((e: { message: string }) => e.message).join(", ")}`,
             ErrorType.VALIDATION_ERROR,
             { operation: "setConfig", key },
             true
           );
         }
 
-        this.config[key] = result.data;
+        this.config[key] = result.output;
         void this.saveConfig({});
       },
       { operation: "setConfig", key }
@@ -135,18 +133,18 @@ export class ConfigManager {
     // Always prioritize environment variable for security
     const envKey = process.env.GEMINI_API_KEY;
     if (envKey) {
-      const result = ApiKeySchema.safeParse(envKey);
+      const result = v.safeParse(ApiKeySchema, envKey);
       if (result.success) {
-        return result.data;
+        return result.output;
       }
     }
 
     // Fallback to config (less secure)
     const configKey = this.config.apiKey;
     if (configKey) {
-      const result = ApiKeySchema.safeParse(configKey);
+      const result = v.safeParse(ApiKeySchema, configKey);
       if (result.success) {
-        return result.data;
+        return result.output;
       }
     }
 
